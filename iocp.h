@@ -19,14 +19,17 @@ class CIocpOverlapped
 protected:
 	OVERLAPPED m_ovl;
 	DWORD m_dwLastTime;	// イベント発生した最終時間(ms)
+	THRD* m_pThread;	// イベント発生スレッド
 	
 	CIocpOverlapped()
 	{
 		::ZeroMemory(&m_ovl, sizeof(m_ovl));
+		
 		m_dwLastTime = ::GetTickCount();
+		m_pThread = NULL;
 	}
 public:
-	virtual BOOL OnCompletionIO(THRD* pThread) = 0;	// IO完了イベント
+	virtual BOOL OnCompletionIO(LPOVERLAPPED_ENTRY lpCPEntry) = 0;	// IO完了イベント
 	virtual operator HANDLE() = 0;	// IOCP用のハンドル取得
 };
 
@@ -55,26 +58,27 @@ protected:
 	{
 		THRD* pThis = static_cast<THRD*>(pParam);
 		TTPL* pIocp = pThis->m_pIocp;	// IOCPスレッドプール
-		DWORD dwLastTime = ::GetTickCount();	// 最終更新時間
-		
 		OVERLAPPED_ENTRY CPEntries[NEnt] = { 0 };	// (スレッド数増加=>エントリ数減少:16 / m_nThreadCnt + 1)
 		INT iNumEntries;
+		DWORD dwLastTime = ::GetTickCount();	// 最終更新時間
 		
 		while ((iNumEntries = pIocp->WaitForIocp(CPEntries, NEnt)) >= 0)	// 完了イベント待機
 		{
-			LPOVERLAPPED_ENTRY lpCPEntry = CPEntries + iNumEntries;
 			DWORD dwCurrentTime = ::GetTickCount();
+			LPOVERLAPPED_ENTRY lpCPEntry = CPEntries + iNumEntries;
 			
 			while (--lpCPEntry >= CPEntries)	// 全エントリチェック
 			{
 				if (!lpCPEntry->lpOverlapped)
 					pIocp->OnPostEvent(lpCPEntry);	// ユーザイベント発行
+				
 				else if (lpCPEntry->lpCompletionKey)
 				{	// イベントハンドラ取得
 					TOVL* pIO = reinterpret_cast<TOVL*>(lpCPEntry->lpCompletionKey);
 					
 					pIO->m_dwLastTime = dwCurrentTime;
-					if (!pIO->OnCompletionIO(pThis))	// IO完了イベント発行
+					pIO->m_pThread = pThis;
+					if (!pIO->OnCompletionIO(lpCPEntry))	// IO完了イベント発行
 						pThis->OnCancelIO(pIO);		// IOエラー時のイベント発行
 				}
 			}
@@ -222,7 +226,7 @@ public:
 		if (!m_pThreads)
 			return FALSE;
 		
-		// タイムアウト時間設定(最大タイムアウト値の半分以上は無効)
+		// タイムアウト時間設定(最大タイムアウト値/2以上は無効)
 		m_dwMinKeepAlive = (nKeepAlive <= INFINITE / 2 ? nKeepAlive : INFINITE);
 		m_nThreadCnt = m_nThreadNum;	// スレッドカウンタ初期化
 		

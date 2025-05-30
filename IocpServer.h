@@ -48,19 +48,18 @@ protected:
 	} m_ioState;
 	
 	LPWSABUF m_pWsaBuf;	// 送受信保留データ
-	CSocketFactory* m_pSockFct;	// Socket作成I/F
 	
 	CIocpSocket();
 	~CIocpSocket();
 	
-	BOOL OnCompletionIO(CSocketFactory* pFct);	// IO完了イベント
+	BOOL OnCompletionIO(LPOVERLAPPED_ENTRY lpCPEntry);	// IO完了イベント
 	
 	virtual BOOL OnAccept(const CSockAddrIn* pAddrRemote = NULL);	// 接続受入イベント
-	virtual BOOL OnConnect();	// 接続完了イベント
+	virtual BOOL OnConnect(DWORD dwError = 0);	// 接続完了イベント
 	virtual BOOL OnTimeout();	// タイムアウトイベント
 	
-	virtual int OnRead(int iIoSize);	// 受信完了イベント
-	virtual int OnWrite(int iIoSize);	// 送信完了イベント
+	virtual int OnRead(DWORD dwBytes);	// 受信完了イベント
+	virtual int OnWrite(DWORD dwBytes);	// 送信完了イベント
 
 public:
 	operator HANDLE();	// IOCP用のハンドル取得
@@ -91,7 +90,7 @@ public:
 	~CSocketFactory();
 	
 	BOOL FindSocket(CIocpSocket* pSocket);	// ソケット検索
-	BOOL DeleteSocket(CIocpSocket* pSocket);// ソケット削除
+	BOOL DeleteSocket(CIocpSocket* pSocket, BOOL bFind = TRUE);// ソケット削除
 	
 	VOID OnCancelIO(CSocketOverlapped* pIO);// IOキャンセルイベント
 	VOID OnTimeout(DWORD dwCurrentTime);	// タイムアウトイベント
@@ -110,7 +109,7 @@ public:
 			(!pSocket->Socket() || !pSocket->Bind(pAddr ? *pAddr : CSockAddrIn()) ||
 			 !m_pIocp->CreateIocp(pSocket)))	// 作成したソケットをIOCPに関連付ける
 		{
-			CSocketList::Delete(pSocket);	// 失敗時はリストから削除
+			m_listSocket.DeleteItem(pSocket);	// 失敗時はリストから削除
 			pSocket = NULL;
 		}
 		return pSocket;
@@ -134,17 +133,17 @@ public:
 				
 				// ソケットを作成しリストに追加
 				ISBASE_TYPE(TYPE, CIocpSocket);
-				CIocpSocket* pAccept = m_pSockFct->m_listSocket.AddItem<TYPE>(m_pSockFct);
+				CIocpSocket* pAccept = m_pThread->m_listSocket.AddItem<TYPE>(m_pThread);
 				if (!pAccept)
 					return FALSE;
 				
 				pAccept->Attach(sckAcpt);	// 作成したソケットに受入れたソケットのハンドルを割当
-				pAccept->m_pSockFct = m_pSockFct;
+				pAccept->m_pThread = m_pThread;
 				if (!pAccept->OnAccept(&addrRemote))	// 受入れイベントを発行
 					Stop();	// 戻り値=FALSEでAccept停止
 				
 				// ソケット有効時は、IOCPに関連付けて受信開始
-				if (!pAccept->IsValid() || !m_pSockFct->m_pIocp->CreateIocp(pAccept) ||
+				if (!pAccept->IsValid() || !m_pThread->m_pIocp->CreateIocp(pAccept) ||
 					!pAccept->IsPending() && !pAccept->Start())
 					CSocketList::Delete(pAccept);
 				
@@ -176,7 +175,7 @@ public:
 		// ソケット作成に成功したら接続の受け入れ開始
 		if (pListener && (!pListener->Listen(nConnections) || !pListener->Start()))
 		{
-			CSocketList::Delete(pListener);	// 失敗時は削除
+			DeleteSocket(pListener, FALSE);	// 失敗時は削除
 			pListener = NULL;
 		}
 		return pListener;
@@ -191,7 +190,7 @@ public:
 		// ソケット作成に成功したら接続開始
 		if (pConnect && !pConnect->Connect(addrRemote))
 		{
-			CSocketList::Delete(pConnect);	// 失敗時は削除
+			DeleteSocket(pConnect, FALSE);	// 失敗時は削除
 			pConnect = NULL;
 		}
 		return pConnect;
@@ -227,7 +226,7 @@ public:
 			 GetAddrInfoEx(pName, pServiceName, NS_DNS, NULL, NULL, &pConnect->pResult,
 						NULL, &pConnect->m_ovl, pConnect->QueryComplete, &hCancel) != WSA_IO_PENDING)
 		{
-			CSocketList::Delete(pConnect);	// 失敗時は削除
+			DeleteSocket(pConnect, FALSE);	// 失敗時は削除
 			pConnect = NULL;
 		}
 		return pConnect;
@@ -272,7 +271,7 @@ public:
 	};
 	
 	// サーバ起動(TYPE: CIocpSocket派生クラス, SYNC: 同期/非同期)
-	template <class TYPE, bool SYNC = TRUE>
+	template <class TYPE, bool SYNC = true>
 	BOOL Listen(USHORT nPort, int nConnections = SOMAXCONN, 
 				DWORD nThreadCnt = 0, DWORD nKeepAlive = MIN_KEEPALIVE)
 	{

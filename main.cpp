@@ -17,28 +17,28 @@ class CIocpSocketImpl : public CIocpSocket
 		
 		return TRUE;
 	}
-	BOOL OnConnect()	// 接続完了イベント
+	BOOL OnConnect(DWORD dwError)	// 接続完了イベント
 	{
 	#define CON_MSG "IOCP Client Connected."
-		
-		return (Write(CON_MSG, sizeof(CON_MSG)) > 0);	// メッセージ送信
+
+		return (!dwError && Write(CON_MSG, sizeof(CON_MSG)) > 0);	// メッセージ送信
 	}
 	
-	int OnRead(int iIoSize)	// 受信完了イベント
+	int OnRead(DWORD dwBytes)	// 受信完了イベント
 	{
 		CHAR cBuff[64] = "";
 		int iRecSize = Receive(cBuff, sizeof(cBuff));	// データ受信
 		
 		if (iRecSize > 0)	// 受信データあり
 		{	// サーバオブジェクト取得
-			CIocpServer* pServer = static_cast<CIocpServer*>(m_pSockFct->GetIocp());
+			CIocpServer* pServer = static_cast<CIocpServer*>(m_pThread->GetIocp());
 			if (lstrcmpA(cBuff, "connect") == 0)	// 接続追加
 			{
-				//m_pSockFct->ApcMsgSend(pServer, CIocpServer::AddPort<CIocpSocketImpl>(PORT_NUM));
-				//m_pSockFct->ApcMsgSend(pServer, CIocpServer::DelPort(PORT_NUM));
+				//m_pThread->ApcMsgSend(pServer, CIocpServer::AddPort<CIocpSocketImpl>(PORT_NUM));
+				//m_pThread->ApcMsgSend(pServer, CIocpServer::DelPort(PORT_NUM));
 				
-				//m_pSockFct->AddConnection<CIocpSocketImpl>(TEXT("www.google.com"), TEXT("443"));
-				m_pSockFct->AddConnection<CIocpSocketImpl>(CSockAddrIn("127.0.0.1", PORT_NUM));
+				//m_pThread->AddConnection<CIocpSocketImpl>(TEXT("www.google.com"), TEXT("443"));
+				m_pThread->AddConnection<CIocpSocketImpl>(CSockAddrIn("127.0.0.1", PORT_NUM));
 			}
 			else if (lstrcmpA(cBuff, "stop") == 0)	// サーバ停止
 				pServer->Stop();
@@ -57,10 +57,11 @@ int main()
 	WSA_STARTUP	// Winsock初期化
 	CIocpServer svr;
 	
-	svr.Listen<CIocpSocketImpl, false>(PORT_NUM);	// サーバ起動
-	//svr.ApcMsgSend(&svr, CIocpServer::DelPort(PORT_NUM));
+	if (!svr.Listen<CIocpSocketImpl, false>(PORT_NUM))	// サーバ起動
+		return -1;
 	
 	// クライアント接続開始
+	//svr.ApcMsgSend(&svr, CIocpServer::DelPort(PORT_NUM));
 	CIocpSocket* pClient = svr.AddConnection<CIocpSocketImpl>(CSockAddrIn("127.0.0.1", PORT_NUM));
 	if (pClient == NULL)
 		return -1;

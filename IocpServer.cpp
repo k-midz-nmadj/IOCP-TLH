@@ -39,24 +39,21 @@ SOCKET CSocketAsync::Attach(CSocketAsync& sock)
 CIocpSocket::CIocpSocket()
 {
 	m_ioState = IOInit;
-	
-	m_pSockFct = NULL;
 	m_pWsaBuf = NULL;
 }
 
 CIocpSocket::~CIocpSocket()
 {
-	if (m_pSockFct && m_pWsaBuf)	// 保留バッファ残留時は解放
-		m_pSockFct->Free(m_pWsaBuf);
+	if (m_pThread && m_pWsaBuf)	// 保留バッファ残留時は解放
+		m_pThread->Free(m_pWsaBuf);
 }
 
 // 非同期Socketイベントハンドラ
-BOOL CIocpSocket::OnCompletionIO(CSocketFactory* pFct)
+BOOL CIocpSocket::OnCompletionIO(LPOVERLAPPED_ENTRY lpCPEntry)
 {
-	int iRes, iIoType = m_ioState;
+	int iRes = 0, iIoType = m_ioState;
 	
 	::ZeroMemory(&m_ovl, sizeof(m_ovl));
-	m_pSockFct = pFct;	// アロケータ(TLH)取得
 	m_ioState = IOInit;	// イベント発生時は状態初期化
 	
 	if (!IsValid())
@@ -68,21 +65,20 @@ BOOL CIocpSocket::OnCompletionIO(CSocketFactory* pFct)
 		iRes = OnAccept();
 		break;
 	case IOConnect:	// 接続完了(ソケットのアドレス情報を更新し、Shutdownを使用可にする)
-		iRes = (SetSockOpt(SO_UPDATE_CONNECT_CONTEXT, NULL, 0) && OnConnect());
+		if (lpCPEntry->Internal >= 0xc0000000 || SetSockOpt(SO_UPDATE_CONNECT_CONTEXT, NULL, 0))
+			iRes = OnConnect((DWORD)lpCPEntry->Internal);	// 接続状態(NTSTATUS値)通知
 		break;
 	case IOReceive:	// 受信完了
-		iRes = OnRead(0);
+		iRes = OnRead(lpCPEntry->dwNumberOfBytesTransferred);
 		break;
 	case IOSend:	// 送信完了
 		if (m_pWsaBuf)
 		{
-			pFct->Free(m_pWsaBuf);	// 保留バッファ解放
+			m_pThread->Free(m_pWsaBuf);	// 保留バッファ解放
 			m_pWsaBuf = NULL;
 		}
-		iRes = OnWrite(0);
+		iRes = OnWrite(lpCPEntry->dwNumberOfBytesTransferred);
 		break;
-	default:	// 不正イベントはエラー
-		iRes = 0;
 	}
 	return (iRes > 0 && (IsPending() || Start()));	// エラーとIO要求がなければ受信再開
 }
@@ -99,7 +95,7 @@ BOOL CIocpSocket::OnAccept(const CSockAddrIn* pAddrRemote)
 	return TRUE;
 }
 // 接続完了イベント(デフォルト実装)
-BOOL CIocpSocket::OnConnect()
+BOOL CIocpSocket::OnConnect(DWORD dwError)
 {
 	return TRUE;
 }
@@ -110,12 +106,12 @@ BOOL CIocpSocket::OnTimeout()
 }
 
 // 受信完了イベント(デフォルト実装)
-int CIocpSocket::OnRead(int iIoSize)
+int CIocpSocket::OnRead(DWORD dwBytes)
 {
 	return 0;
 }
 // 送信完了イベント(デフォルト実装)
-int CIocpSocket::OnWrite(int iIoSize)
+int CIocpSocket::OnWrite(DWORD dwBytes)
 {
 	return 0;
 }
@@ -164,10 +160,10 @@ int CIocpSocket::Write(LPCVOID pBuff, int iSendSize)
 		iIoSize = 0;
 	}
 	
-	if (iIoSize < iSendSize && m_pSockFct)	// 送信できなかった保留データをTLHで保存
+	if (iIoSize < iSendSize && m_pThread)	// 送信できなかった保留データをTLHで保存
 	{
 		iSendSize -= iIoSize;
-		m_pWsaBuf = static_cast<LPWSABUF>(m_pSockFct->Alloc(sizeof(WSABUF) + iSendSize));
+		m_pWsaBuf = static_cast<LPWSABUF>(m_pThread->Alloc(sizeof(WSABUF) + iSendSize));
 		if (!m_pWsaBuf)
 			return SOCKET_ERROR;
 		
@@ -188,7 +184,7 @@ int CIocpSocket::Write(LPCVOID pBuff, int iSendSize)
 // クライアントの接続開始
 BOOL CIocpSocket::Connect(const SOCKADDR* ai_addr, int ai_addrlen)
 {
-	if (IsPending() || m_pSockFct)
+	if (IsPending() || m_pThread)
 		return FALSE;	// IO要求済みか接続済みなら接続無効
 	
 	LPFN_CONNECTEX lpfnConnectEx = NULL;
@@ -228,9 +224,9 @@ BOOL CSocketFactory::FindSocket(CIocpSocket* pFind)
 }
 
 // ソケット削除
-BOOL CSocketFactory::DeleteSocket(CIocpSocket* pSocket)
+BOOL CSocketFactory::DeleteSocket(CIocpSocket* pSocket, BOOL bFind)
 {
-	return m_listSocket.DeleteItem(pSocket, TRUE);	// ソケット検出有効
+	return m_listSocket.DeleteItem(pSocket, bFind);	// ソケット検出有効
 }
 
 // IOキャンセルイベント
