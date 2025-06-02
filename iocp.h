@@ -209,7 +209,7 @@ public:
 	// スレッドプールの実行開始(bSync: 同期/非同期)
 	BOOL Start(DWORD nKeepAlive = MIN_KEEPALIVE, BOOL bSync = TRUE)
 	{
-		if (m_pThreads)
+		if (m_pThreads || !CreateIocp())	// IOCP未作成なら作成
 			return FALSE;	// スレッドプール実行中
 		
 		if (m_nThreadNum == 0)	// スレッド数が未設定ならCPU数をセット
@@ -218,8 +218,6 @@ public:
 			::GetSystemInfo(&systemInfo);
 			m_nThreadNum = systemInfo.dwNumberOfProcessors;
 		}
-		if (!CreateIocp())	// IOCP未作成なら作成
-			return FALSE;
 		
 		// スレッドプール作成(同時にSuspendするスレッドの最大数を加算: m_nThreadNum += N)
 		m_pThreads = new THRD[m_nThreadNum];
