@@ -129,6 +129,7 @@ public:
 								reinterpret_cast<char*>(&m_hSocket), sizeof(m_hSocket)))
 				{
 					m_pAccept->m_pThread = m_pThread;
+					m_pAccept->m_dwLastTime = m_dwLastTime;
 					if (!m_pAccept->OnAccept(&m_addrRemote))	// 受入れイベントを発行
 						Stop();	// 戻り値=FALSEでAccept停止
 					
