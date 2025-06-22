@@ -24,7 +24,7 @@ class CIocpSocketSvr : public CIocpSocket
 		CHAR cBuff[64] = "";
 		int iRecSize = Receive(cBuff, sizeof(cBuff));	// データ受信
 		
-		return <iRecSize > 0 ? Write(cBuff, iRecSize) : 0);	// 受信データ返送
+		return (iRecSize > 0 ? Write(cBuff, iRecSize) : 0);	// 受信データ返送
 	}
 };
 
