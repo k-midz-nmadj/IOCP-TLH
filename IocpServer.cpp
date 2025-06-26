@@ -237,7 +237,7 @@ VOID CSocketFactory::OnTimeout(DWORD dwCurrentTime)
 	
 	while (pSocket = m_listSocket.GetNext(pItr))
 	{
-		if (DIFF_TIME(dwCurrentTime, pSocket->m_dwLastTime) >= m_pIocp->m_dwMinKeepAlive && 
+		if (DIFF_TIME(dwCurrentTime, pSocket->m_dwLastTime) > m_pIocp->m_dwMinKeepAlive && 
 			!pSocket->OnTimeout())	// 各ソケットのタイムアウトイベント発行
 			m_listSocket.DeleteItem(pSocket);	// 戻り値=FALSE:ソケット削除
 	}

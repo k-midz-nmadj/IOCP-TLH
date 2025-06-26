@@ -7,11 +7,11 @@
 #include <malloc.h>
 
 #define MIN_KEEPALIVE 30000
-#define DIFF_TIME(now, tm) (now >= tm ? now - (tm) : ((DWORD)(~0) - (tm)) + now)
+#define DIFF_TIME(now, tm) (now >= tm ? now - (tm) : (DWORD)(0x100000000 - (tm)) + now)
 #define TRUNC_WAIT_OBJECTS(n) (n < MAXIMUM_WAIT_OBJECTS ? n : MAXIMUM_WAIT_OBJECTS)
 
 // IO完了イベント定義クラス
-template <class THRD>	// THRD: スレッド実装クラス
+template <class THRD = CAPCThread>	// THRD: スレッド実装クラス
 class CIocpOverlapped
 {
 	template <class, int> friend class CIocpThread;
@@ -34,8 +34,7 @@ public:
 };
 
 // IOCP用スレッド実装クラス
-template <class THRD, int NEnt = 1>	// NEnt: 完了イベント1回で取得できる最大エントリ数
-//template <class THRD, class TTPL>
+template <class THRD = CAPCThread, int NEnt = 1>	// NEnt: 完了イベント1回で取得できる最大エントリ数
 class CIocpThread : public CAPCThread
 {
 	template <class> friend class CIocpThreadPool;
@@ -58,36 +57,40 @@ protected:
 	{
 		THRD* pThis = static_cast<THRD*>(pParam);
 		TTPL* pIocp = pThis->m_pIocp;	// IOCPスレッドプール
-		OVERLAPPED_ENTRY CPEntries[NEnt] = { 0 };	// (スレッド数増加=>エントリ数減少:16 / m_nThreadCnt + 1)
 		INT iNumEntries;
+		OVERLAPPED_ENTRY *lpCPEntry, CPEntries[NEnt] = {0};	// (スレッド数増加=>エントリ数減少:16/m_nThreadCnt+1)
 		DWORD dwLastTime = ::GetTickCount();	// 最終更新時間
 		
-		while ((iNumEntries = pIocp->WaitForIocp(CPEntries, NEnt)) >= 0)	// 完了イベント待機
+		while ((iNumEntries = pIocp->WaitForIocp(CPEntries, NEnt)) != TTPL::EC_STOP)	// 完了イベント待機
 		{
 			DWORD dwCurrentTime = ::GetTickCount();
-			LPOVERLAPPED_ENTRY lpCPEntry = CPEntries + iNumEntries;
 			
-			while (--lpCPEntry >= CPEntries)	// 全エントリチェック
+			switch (iNumEntries)
 			{
-				if (!lpCPEntry->lpOverlapped)
+			default:	// 完了イベント取得(iNumEntries > 0)
+				lpCPEntry = CPEntries + iNumEntries;
+				while (--lpCPEntry >= CPEntries)	// 全エントリチェック
 				{
-					lpCPEntry->Internal = reinterpret_cast<ULONG_PTR>(pThis);
-					pIocp->OnPostEvent(lpCPEntry);	// ユーザイベント発行
+					if (!lpCPEntry->lpOverlapped)
+					{
+						lpCPEntry->Internal = reinterpret_cast<ULONG_PTR>(pThis);
+						pIocp->OnPostEvent(lpCPEntry);	// ユーザイベント発行
+					}
+					else if (lpCPEntry->lpCompletionKey)
+					{	// イベントハンドラ取得
+						TOVL* pIO = reinterpret_cast<TOVL*>(lpCPEntry->lpCompletionKey);
+						
+						pIO->m_dwLastTime = dwCurrentTime;
+						pIO->m_pThread = pThis;
+						if (!pIO->OnCompletionIO(lpCPEntry))	// IO完了イベント発行
+							pThis->OnCancelIO(pIO);		// IOエラー時のイベント発行
+					}
 				}
-				else if (lpCPEntry->lpCompletionKey)
-				{	// イベントハンドラ取得
-					TOVL* pIO = reinterpret_cast<TOVL*>(lpCPEntry->lpCompletionKey);
-					
-					pIO->m_dwLastTime = dwCurrentTime;
-					pIO->m_pThread = pThis;
-					if (!pIO->OnCompletionIO(lpCPEntry))	// IO完了イベント発行
-						pThis->OnCancelIO(pIO);		// IOエラー時のイベント発行
-				}
-			}
-			
-			if (DIFF_TIME(dwCurrentTime, dwLastTime) >= pIocp->m_dwMinKeepAlive)	// タイムアウト判定
-			{
-				pThis->OnTimeout(dwCurrentTime);	// タイムアウトイベント発行
+			case TTPL::EC_APC:	// APC実行時はタイムアウト判定
+				if (DIFF_TIME(dwCurrentTime, dwLastTime) <= pIocp->m_dwMinKeepAlive)
+					break;
+			case TTPL::EC_TIMEOUT:	// タイムアウトイベント発行
+				pThis->OnTimeout(dwCurrentTime);
 				dwLastTime = dwCurrentTime;
 			}
 		}
@@ -113,14 +116,20 @@ public:
 };
 
 // IOCP用スレッドプールクラス
-template <class THRD>
-//template <class THRD, TOVL>
+template <class THRD = CAPCThread>
 class CIocpThreadPool
 {
 	template <class, int> friend class CIocpThread;
 	friend THRD;
 protected:
 	typedef typename THRD::TOVL TOVL;
+	
+	enum	// IO待機終了コード
+	{
+		EC_STOP    =  0,	// スレッド終了
+		EC_TIMEOUT = -1,	// タイムアウト
+		EC_APC     = -2,	// APC実行
+	};
 	
 	HANDLE m_hIocp;			// IOCPハンドル
 	DWORD m_dwMinKeepAlive;	// 最小接続維持時間(ms)
@@ -133,7 +142,7 @@ protected:
 	{
 	}
 	
-	// IO完了イベント待機(戻り値: 0以上=実行継続/-1=エラー終了)
+	// IO完了イベント待機(戻り値: 0以外=実行継続/0=エラー終了)
 	INT WaitForIocp(LPOVERLAPPED_ENTRY CPEntries, ULONG ulNumEntries)
 	{
 		if (!::GetQueuedCompletionStatusEx(
@@ -144,8 +153,9 @@ protected:
 			switch (::GetLastError())	// エラー判定
 			{
 			case WAIT_IO_COMPLETION:	// APC queued
+				return EC_APC;
 			case WAIT_TIMEOUT:			// Timeout
-				return 0;
+				return EC_TIMEOUT;
 //			case ERROR_INVALID_HANDLE:	// Invalid Handle
 //			case ERROR_ABANDONED_WAIT_0:// IOCP closed
 			default:
@@ -154,7 +164,7 @@ protected:
 				if (pThreads && ::InterlockedDecrement(&m_nThreadCnt) == 0)
 					delete[] pThreads;	// 全終了でスレッド配列を解放
 				
-				return -1;
+				return EC_STOP;
 			}
 		}
 		return ulNumEntries;
@@ -171,7 +181,7 @@ protected:
 		{
 			DWORD nThreadCnt, nTplCnt;
 			DWORD dwCrtThreadId = ::GetCurrentThreadId();
-			LPHANDLE phThreadPool = (LPHANDLE)alloca(sizeof(HANDLE) * nThreadNum);
+			LPHANDLE phThreadPool = static_cast<LPHANDLE>(alloca(sizeof(HANDLE) * nThreadNum));
 			
 			// 待機用スレッドハンドルの配列作成
 			for (nThreadCnt = nTplCnt = 0; nThreadCnt < nThreadNum ; ++nThreadCnt)
@@ -200,9 +210,9 @@ public:
 		JoinThread(m_nThreadNum);	// スレッドプール終了待機
 	}
 	
-	BOOL IsRunning()	// スレッド実行中:TRUE
+	DWORD GetThreadCount()	// 実行スレッド数取得
 	{
-		return (m_nThreadCnt > 0);
+		return (m_nThreadCnt > 0 ? m_nThreadCnt : 0);
 	}
 	
 	// IOCPの作成とIOハンドル関連付け
@@ -236,7 +246,7 @@ public:
 	// スレッドプールの実行開始(bSync: 同期/非同期)
 	BOOL Start(DWORD nKeepAlive = MIN_KEEPALIVE, BOOL bSync = TRUE)
 	{
-		if (IsRunning() || !CreateIocp())	// IOCP未作成なら作成
+		if (m_nThreadCnt > 0 || !CreateIocp())	// IOCP未作成なら作成
 			return FALSE;	// スレッドプール実行中
 		
 		if (m_nThreadNum == 0)	// スレッド数が未設定ならCPU数をセット
@@ -269,7 +279,7 @@ public:
 	// スレッドプールの実行終了
 	BOOL Stop()
 	{
-		HANDLE hIocp = ::InterlockedExchangePointer(&m_hIocp, NULL);	// IOCPハンドルのクリア判定により再入防止
+		HANDLE hIocp = ::InterlockedExchangePointer(&m_hIocp, NULL);	// IOCPハンドルのクリア判定で再入防止
 		
 		return (hIocp ? ::CloseHandle(hIocp) : FALSE);	// IOCP解放によりスレッド終了
 	}
