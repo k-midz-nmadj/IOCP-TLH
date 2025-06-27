@@ -14,7 +14,7 @@
 template <class THRD = CAPCThread>	// THRD: スレッド実装クラス
 class CIocpOverlapped
 {
-	template <class, int> friend class CIocpThread;
+	template <class> friend class CIocpThreadPool;
 	friend THRD;
 protected:
 	OVERLAPPED m_ovl;
@@ -56,45 +56,9 @@ protected:
 	static DWORD WINAPI MainProc(LPVOID pParam)
 	{
 		THRD* pThis = static_cast<THRD*>(pParam);
-		TTPL* pIocp = pThis->m_pIocp;	// IOCPスレッドプール
-		INT iNumEntries;
-		OVERLAPPED_ENTRY *lpCPEntry, CPEntries[NEnt] = {0};	// (スレッド数増加=>エントリ数減少:16/m_nThreadCnt+1)
-		DWORD dwLastTime = ::GetTickCount();	// 最終更新時間
 		
-		while ((iNumEntries = pIocp->WaitForIocp(CPEntries, NEnt)) != TTPL::EC_STOP)	// 完了イベント待機
-		{
-			DWORD dwCurrentTime = ::GetTickCount();
-			
-			switch (iNumEntries)
-			{
-			default:	// 完了イベント取得(iNumEntries > 0)
-				lpCPEntry = CPEntries + iNumEntries;
-				while (--lpCPEntry >= CPEntries)	// 全エントリチェック
-				{
-					if (!lpCPEntry->lpOverlapped)
-					{
-						lpCPEntry->Internal = reinterpret_cast<ULONG_PTR>(pThis);
-						pIocp->OnPostEvent(lpCPEntry);	// ユーザイベント発行
-					}
-					else if (lpCPEntry->lpCompletionKey)
-					{	// イベントハンドラ取得
-						TOVL* pIO = reinterpret_cast<TOVL*>(lpCPEntry->lpCompletionKey);
-						
-						pIO->m_dwLastTime = dwCurrentTime;
-						pIO->m_pThread = pThis;
-						if (!pIO->OnCompletionIO(lpCPEntry))	// IO完了イベント発行
-							pThis->OnCancelIO(pIO);		// IOエラー時のイベント発行
-					}
-				}
-			case TTPL::EC_APC:	// APC実行時はタイムアウト判定
-				if (DIFF_TIME(dwCurrentTime, dwLastTime) <= pIocp->m_dwMinKeepAlive)
-					break;
-			case TTPL::EC_TIMEOUT:	// タイムアウトイベント発行
-				pThis->OnTimeout(dwCurrentTime);
-				dwLastTime = dwCurrentTime;
-			}
-		}
-		return 0;	// (エラー終了時はTHRDオブジェクトが解放されるためアクセス禁止)
+		// (終了時はTHRDオブジェクトが解放されるためアクセス禁止)
+		return pThis->m_pIocp->WaitForIocp<NEnt>(pThis);
 	}
 public:
 	CIocpThread(TTPL* pIocp = NULL) : m_pIocp(pIocp)
@@ -124,13 +88,6 @@ class CIocpThreadPool
 protected:
 	typedef typename THRD::TOVL TOVL;
 	
-	enum	// IO待機終了コード
-	{
-		EC_STOP    =  0,	// スレッド終了
-		EC_TIMEOUT = -1,	// タイムアウト
-		EC_APC     = -2,	// APC実行
-	};
-	
 	HANDLE m_hIocp;			// IOCPハンドル
 	DWORD m_dwMinKeepAlive;	// 最小接続維持時間(ms)
 	DWORD m_nThreadNum;		// スレッド数
@@ -142,32 +99,63 @@ protected:
 	{
 	}
 	
-	// IO完了イベント待機(戻り値: 0以外=実行継続/0=エラー終了)
-	INT WaitForIocp(LPOVERLAPPED_ENTRY CPEntries, ULONG ulNumEntries)
+	// IO完了イベント待機
+	template <int NEnt = 1>
+	DWORD WaitForIocp(THRD* pThread)
 	{
-		if (!::GetQueuedCompletionStatusEx(
-				m_hIocp,
-				CPEntries, ulNumEntries, &ulNumEntries,
-				m_dwMinKeepAlive, TRUE))	// APC有効化(Alert状態)で待機
+		DWORD dwLastTime = ::GetTickCount();	// 最終更新時間
+		while (m_hIocp)
 		{
-			switch (::GetLastError())	// エラー判定
+			ULONG ulNumEntries = 0;
+			OVERLAPPED_ENTRY CPEntries[NEnt] = {0};
+			DWORD dwError = ::GetQueuedCompletionStatusEx(
+								m_hIocp,
+								CPEntries, NEnt, &ulNumEntries,
+								m_dwMinKeepAlive, TRUE);	// APC有効化(Alert状態)で待機
+			DWORD dwCurrentTime = ::GetTickCount();
+			if (dwError)
+			{
+				LPOVERLAPPED_ENTRY lpCPEntry = CPEntries + ulNumEntries;
+				while (--lpCPEntry >= CPEntries)	// 全エントリチェック
+				{
+					if (!lpCPEntry->lpOverlapped)
+					{
+						lpCPEntry->Internal = reinterpret_cast<ULONG_PTR>(pThread);
+						OnPostEvent(lpCPEntry);	// ユーザイベント発行
+					}
+					else if (lpCPEntry->lpCompletionKey)
+					{	// イベントハンドラ取得
+						TOVL* pIO = reinterpret_cast<TOVL*>(lpCPEntry->lpCompletionKey);
+						
+						pIO->m_dwLastTime = dwCurrentTime;
+						pIO->m_pThread = pThread;
+						if (!pIO->OnCompletionIO(lpCPEntry))	// IO完了イベント発行
+							pThread->OnCancelIO(pIO);		// IOエラー時のイベント発行
+					}
+				}
+				dwError = WAIT_IO_COMPLETION;
+			}
+			else
+				dwError = ::GetLastError();
+			
+			switch (dwError)	// エラー判定
 			{
 			case WAIT_IO_COMPLETION:	// APC queued
-				return EC_APC;
+				if (DIFF_TIME(dwCurrentTime, dwLastTime) <= m_dwMinKeepAlive)
+					break;
 			case WAIT_TIMEOUT:			// Timeout
-				return EC_TIMEOUT;
-//			case ERROR_INVALID_HANDLE:	// Invalid Handle
-//			case ERROR_ABANDONED_WAIT_0:// IOCP closed
-			default:
-				// IOCPハンドル解放によるエラー時、スレッド数をカウントダウン
-				THRD* pThreads = m_pThreads;
-				if (pThreads && ::InterlockedDecrement(&m_nThreadCnt) == 0)
-					delete[] pThreads;	// 全終了でスレッド配列を解放
-				
-				return EC_STOP;
+				pThread->OnTimeout(dwCurrentTime);
+				dwLastTime = dwCurrentTime;
+			//case ERROR_INVALID_HANDLE:	// Invalid Handle
+			//case ERROR_ABANDONED_WAIT_0:// IOCP closed
 			}
 		}
-		return ulNumEntries;
+		// IOCPハンドル解放によるエラー時、スレッド数をカウントダウン
+		pThread = m_pThreads;
+		if (pThread && ::InterlockedDecrement(&m_nThreadCnt) == 0)
+			delete[] pThread;	// 全終了でスレッド配列を解放
+		
+		return dwLastTime;	// 待機終了
 	}
 	
 	// スレッドプール終了待機
