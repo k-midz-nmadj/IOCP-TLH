@@ -34,8 +34,7 @@ struct CSockAddrIn
 	CHAR __si_pad[28];
 	
 	// ポートとIPv4アドレスによる初期化
-	CSockAddrIn(USHORT port = 0, ULONG addr = INADDR_ANY, ADDRESS_FAMILY family = AF_INET)
-		: sin_family(family), sin_port(htons(port))
+	CSockAddrIn(USHORT port = 0, ULONG addr = INADDR_ANY) : sin_family(AF_INET), sin_port(htons(port))
 	{
 		reinterpret_cast<IN_ADDR*>(__si_pad)->s_addr = addr;
 	}
@@ -60,7 +59,7 @@ struct CSockAddrIn
 	}
 	operator ULONG() const
 	{
-		return reinterpret_cast<const IN_ADDR*>(__si_pad)->s_addr;
+		return (sin_family == AF_INET ? reinterpret_cast<const IN_ADDR*>(__si_pad)->s_addr : INADDR_NONE);
 	}
 	operator SOCKADDR*()
 	{
@@ -211,7 +210,7 @@ public:
 	{
 		return (SOCKET_ERROR != ioctlsocket(m_hSocket, cmd, argp));
 	}
-	int GetLastError()
+	static int GetLastError()
 	{
 		return WSAGetLastError();
 	}

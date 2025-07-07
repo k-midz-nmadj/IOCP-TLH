@@ -60,7 +60,7 @@ class CIocpSocketClt : public CIocpSocket
 		}
 		else
 		{
-			printf("\nDisconnected...");
+			printf("\n...Disconnected");
 			m_pThread->GetIocp()->Stop();	// 切断時は終了
 		}
 		return iRecSize;
@@ -80,6 +80,7 @@ int main(int argc, char **argv)
 				argc > 2 ? atoi(argv[2]) : PORT_NUM))
 		return -1;
 	
+	printf("Connecting...\n");
 	return svr.Start();	// サーバ起動
 }
 

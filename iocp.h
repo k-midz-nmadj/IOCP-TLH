@@ -32,7 +32,7 @@ public:
 };
 
 // IOCP用スレッドクラス
-template <class THRD = CIocpThread<>, int NEnt = 1>
+template <class THRD = CAPCThread, int NEnt = 1>
 class CIocpThread : public CAPCThread
 {
 	template <class, int> friend class CIocpThreadPool;

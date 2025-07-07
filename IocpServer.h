@@ -233,12 +233,12 @@ protected:
 		virtual BOOL Create(CSocketFactory* pFactry) = 0;
 	};
 	template <class PRM1, class PRM2>	// パラメータ格納用テンプレート
-	struct CParamSets
+	struct CSocketCreatorT : public CSocketCreator
 	{
 		PRM1 m_param1;	// 第1パラメータ
 		PRM2 m_param2;	// 第2パラメータ
 		
-		CParamSets(const PRM1& param1, const PRM2& param2) : m_param1(param1), m_param2(param2)
+		CSocketCreatorT(const PRM1& param1, const PRM2& param2) : m_param1(param1), m_param2(param2)
 		{
 		}
 	};
@@ -263,9 +263,9 @@ public:
 	template <class TYPE>	// TYPE: CIocpSocket派生クラス
 	BOOL AddListener(USHORT nPort, int nConnections = SOMAXCONN)
 	{
-		struct CSocketCreatorListen : CSocketCreator, CParamSets<USHORT, int>
+		struct CSocketCreatorListen : public CSocketCreatorT<USHORT, int>
 		{
-			CSocketCreatorListen(USHORT nPort, int nConnections) : CParamSets(nPort, nConnections)
+			CSocketCreatorListen(USHORT nPort, int nConnections) : CSocketCreatorT(nPort, nConnections)
 			{
 			}
 			BOOL Create(CSocketFactory* pFactry)	// (スレッドプール内から呼出)
@@ -280,9 +280,9 @@ public:
 	template <class TYPE>	// TYPE: CIocpSocket派生クラス
 	BOOL AddConnection(const char* addr_v4, USHORT nPort)
 	{
-		struct CSocketCreatorConnect : CSocketCreator, CParamSets<USHORT, ULONG>
+		struct CSocketCreatorConnect : public CSocketCreatorT<USHORT, ULONG>
 		{
-			CSocketCreatorConnect(USHORT nPort, ULONG ulAddr) : CParamSets(nPort, ulAddr)
+			CSocketCreatorConnect(USHORT nPort, ULONG ulAddr) : CSocketCreatorT(nPort, ulAddr)
 			{
 			}
 			BOOL Create(CSocketFactory* pFactry)	// (スレッドプール内から呼出)
