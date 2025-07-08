@@ -21,6 +21,8 @@ class CIocpSocketSvr : public CIocpSocket
 // IOCPソケット実装クラス(クライアント)
 class CIocpSocketClt : public CIocpSocket
 {
+	CHAR cBuff[64];
+	
 	BOOL OnConnect(DWORD dwError)	// 接続完了イベント
 	{
 		if (dwError)	// 接続エラー
@@ -29,15 +31,14 @@ class CIocpSocketClt : public CIocpSocket
 			return m_pThread->GetIocp()->Stop();	// 終了
 		}
 		
-		CHAR cBuff[18] = "";
-		printf("\nInput send text[16]: ");
-		if (scanf("%17[^\n]", cBuff) != 1)	// 送信テキスト入力待ち
+		printf("\nInput send text[60]: ");
+		if (scanf("%61[^\n]", cBuff) != 1)	// 送信テキスト入力待ち
 			return m_pThread->GetIocp()->Stop();	// 空入力でサーバ停止
 		
-		if (cBuff[16])
+		if (cBuff[60])
 		{
 			scanf("%*[^\n]");	// 超過入力カット
-			cBuff[16] = 0;
+			cBuff[60] = 0;
 		}
 		scanf("%*c");	// 改行スキップ
 		
@@ -51,7 +52,6 @@ class CIocpSocketClt : public CIocpSocket
 	
 	int OnRead(DWORD dwBytes)	// 受信完了イベント
 	{
-		CHAR cBuff[64] = "";
 		int iRecSize = Receive(cBuff, sizeof(cBuff));	// データ受信
 		if (iRecSize > 0)	// 受信データあり
 		{

@@ -243,8 +243,18 @@ protected:
 		}
 	};
 	
-	// PostEventによるユーザイベント
-	VOID OnPostEvent(LPOVERLAPPED_ENTRY lpCPEntry)
+	BOOL PostCreator(CSocketCreator* pCreator)	// ソケット作成イベント発行
+	{
+		if (pCreator)
+		{
+			if (CreateIocp() && PostEvent(pCreator))	// IOCP作成、ユーザイベント発行
+				return TRUE;
+			
+			delete pCreator;
+		}
+		return FALSE;
+	}
+	VOID OnPostEvent(LPOVERLAPPED_ENTRY lpCPEntry)	// PostEventによるユーザイベント
 	{
 		CSocketCreator* pCreator = reinterpret_cast<CSocketCreator*>(lpCPEntry->lpCompletionKey);
 		
@@ -272,8 +282,8 @@ public:
 			{
 				return (pFactry->AddListener<TYPE>(m_param1, m_param2) != NULL);
 			}
-		};	// IOCP作成、Listenイベント発行
-		return (CreateIocp() && PostEvent(new CSocketCreatorListen(nPort, nConnections)));
+		};	// Listenイベント発行
+		return PostCreator(new CSocketCreatorListen(nPort, nConnections));
 	}
 	
 	// クライアントソケット作成(サーバ起動前)
@@ -289,7 +299,7 @@ public:
 			{
 				return (pFactry->AddConnection<TYPE>(CSockAddrIn(m_param1, m_param2)) != NULL);
 			}
-		};	// IOCP作成、Connectイベント発行
-		return (CreateIocp() && PostEvent(new CSocketCreatorConnect(nPort, inet_addr(addr_v4))));
+		};	// Connectイベント発行
+		return PostCreator(new CSocketCreatorConnect(nPort, inet_addr(addr_v4)));
 	}
 };
