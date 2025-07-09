@@ -243,31 +243,10 @@ protected:
 		}
 	};
 	
-	BOOL PostCreator(CSocketCreator* pCreator)	// ソケット作成イベント発行
-	{
-		if (pCreator)
-		{
-			if (CreateIocp() && PostEvent(pCreator))	// IOCP作成、ユーザイベント発行
-				return TRUE;
-			
-			delete pCreator;
-		}
-		return FALSE;
-	}
-	VOID OnPostEvent(LPOVERLAPPED_ENTRY lpCPEntry)	// PostEventによるユーザイベント
-	{
-		CSocketCreator* pCreator = reinterpret_cast<CSocketCreator*>(lpCPEntry->lpCompletionKey);
-		
-		if (pCreator)	// ソケット作成をスレッドプールで非同期実行
-		{
-			pCreator->Create(reinterpret_cast<CSocketFactory*>(lpCPEntry->Internal));
-			delete pCreator;
-		}
-	}
+	BOOL PostCreator(CSocketCreator* pCreator);	// ソケット作成イベント発行
+	VOID OnPostEvent(LPOVERLAPPED_ENTRY lpCPEntry);	// PostEventによるユーザイベント
 public:
-	CIocpServer(DWORD nThreadCnt = 0) : CIocpServerBase(nThreadCnt)
-	{
-	}
+	CIocpServer(DWORD nThreadCnt = 0);
 	
 	// サーバソケット作成(サーバ起動前)
 	template <class TYPE>	// TYPE: CIocpSocket派生クラス

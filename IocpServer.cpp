@@ -226,10 +226,10 @@ BOOL CSocketFactory::DeleteSocket(CIocpSocket* pSocket, BOOL bFind)
 VOID CSocketFactory::OnCancelIO(CSocketOverlapped* pIO)
 {
 	CIocpSocket* pSocket = static_cast<CIocpSocket*>(pIO);
+	BOOL bStop = (pSocket->IsPending() >= 0);	// 解放前に状態取得
 	
 	pSocket->Close();	// ソケット解放
-	
-	if (pSocket->IsPending() >= 0)
+	if (bStop)
 		m_listSocket.DeleteItem(pSocket);	// 停止中なら削除
 }
 
@@ -247,5 +247,35 @@ VOID CSocketFactory::OnTimeout(DWORD dwCurrentTime)
 		if (DIFF_TIME(dwCurrentTime, pSocket->m_dwLastTime) > m_pIocp->m_dwMinKeepAlive && 
 			!pSocket->OnTimeout())	// 各ソケットのタイムアウトイベント発行
 			m_listSocket.DeleteItem(pSocket);	// 戻り値=FALSE:ソケット削除
+	}
+}
+
+
+CIocpServer::CIocpServer(DWORD nThreadCnt) : CIocpServerBase(nThreadCnt)
+{
+}
+
+// ソケット作成イベント発行
+BOOL CIocpServer::PostCreator(CSocketCreator* pCreator)
+{
+	if (pCreator)
+	{
+		if (CreateIocp() && PostEvent(pCreator))	// IOCP作成、ユーザイベント発行
+			return TRUE;
+		
+		delete pCreator;
+	}
+	return FALSE;
+}
+
+// PostEventによるユーザイベント
+VOID CIocpServer::OnPostEvent(LPOVERLAPPED_ENTRY lpCPEntry)
+{
+	CSocketCreator* pCreator = reinterpret_cast<CSocketCreator*>(lpCPEntry->lpCompletionKey);
+	
+	if (pCreator)	// ソケット作成をスレッドプールで非同期実行
+	{
+		pCreator->Create(reinterpret_cast<CSocketFactory*>(lpCPEntry->Internal));
+		delete pCreator;
 	}
 }
