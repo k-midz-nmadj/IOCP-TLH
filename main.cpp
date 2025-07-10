@@ -73,12 +73,12 @@ int main(int argc, char **argv)
 	CIocpServer svr;
 	
 	if (argc == 1 && !svr.AddListener<CIocpSocketSvr>(PORT_NUM))	// ポートオープン
-		return -1;
+		return 0;
 	
 	if (!svr.AddConnection<CIocpSocketClt>(	// リモート接続(パラメータ省略時はローカル接続)
 				argc > 1 ? argv[1] : "127.0.0.1", 
 				argc > 2 ? atoi(argv[2]) : PORT_NUM))
-		return -1;
+		return 0;
 	
 	printf("Connecting...\n");
 	return svr.Start();	// サーバ起動
