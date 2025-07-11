@@ -32,14 +32,14 @@ struct CSockAddrIn
 	ADDRESS_FAMILY sin_family;
 	USHORT sin_port;
 	CHAR __si_pad[28];
-	
-	// ポートとIPv4アドレスによる初期化
-	CSockAddrIn(USHORT port = 0, ULONG addr = INADDR_ANY) : sin_family(AF_INET), sin_port(htons(port))
+
+	CSockAddrIn(USHORT port = 0, LPCTSTR addr = NULL) 
+		: sin_family(addr && lstrlen(addr) > 15 ? AF_INET6 : AF_INET), sin_port(htons(port))
 	{
-		reinterpret_cast<IN_ADDR*>(__si_pad)->s_addr = addr;
-	}
-	CSockAddrIn(const char* addr_v4, USHORT port) : CSockAddrIn(port, inet_addr(addr_v4))
-	{
+		if (addr)	// アドレス文字列をバイナリへ変換
+			InetPton(sin_family, addr, __si_pad);
+		else
+			::ZeroMemory(__si_pad, sizeof(__si_pad));
 	}
 	
 	// SOCKADDR構造体による初期化

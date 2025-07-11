@@ -75,6 +75,7 @@ int main(int argc, char **argv)
 	if (argc == 1 && !svr.AddListener<CIocpSocketSvr>(PORT_NUM))	// ポートオープン
 		return 0;
 	
+	//if (!svr.AddConnection<CIocpSocketClt>(argv[1], argv[2]))	// (ドメイン指定はUNICODE限定)
 	if (!svr.AddConnection<CIocpSocketClt>(	// リモート接続(パラメータ省略時はローカル接続)
 				argc > 1 ? argv[1] : "127.0.0.1", 
 				argc > 2 ? atoi(argv[2]) : PORT_NUM))

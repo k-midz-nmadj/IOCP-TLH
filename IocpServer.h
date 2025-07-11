@@ -171,14 +171,14 @@ public:
 		return pListener;
 	}
 	
-	// クライアントソケット追加(addrRemote: IPアドレス)
+	// クライアントソケット追加
 	template <class TYPE>	// TYPE: CIocpSocket派生クラス
-	TYPE* AddConnection(const CSockAddrIn& addrRemote)
+	TYPE* AddConnection(LPCTSTR pAddr, USHORT nPort)
 	{
 		TYPE* pConnect = CreateSocket<TYPE>();	// クライアントソケット作成
 		
 		// ソケット作成に成功したら接続開始
-		if (pConnect && !pConnect->Connect(addrRemote))
+		if (pConnect && !pConnect->Connect(CSockAddrIn(nPort, pAddr)))
 		{
 			DeleteSocket(pConnect, FALSE);	// 失敗時は削除
 			pConnect = NULL;
@@ -211,7 +211,7 @@ public:
 		} *pConnect = CreateSocket<CAddrInfoQuery>();	// クライアントソケット作成
 		HANDLE hCancel;
 		
-		// ドメイン名、サービス名による名前解決を非同期(重複IO)で実行
+		// ドメイン名、サービス名による名前解決を非同期(重複IO)で実行(UNICODE版限定)
 		if (pConnect && 
 			 GetAddrInfoEx(pName, pServiceName, NS_DNS, NULL, NULL, &pConnect->pResult,
 						NULL, &pConnect->m_ovl, pConnect->QueryComplete, &hCancel) != WSA_IO_PENDING)
@@ -261,24 +261,28 @@ public:
 			{
 				return (pFactry->AddListener<TYPE>(m_param1, m_param2) != NULL);
 			}
-		};	// Listenイベント発行
-		return PostCreator(new CSocketCreatorListen(nPort, nConnections));
+		private:
+			~CSocketCreatorListen();	// new以外の生成を禁止
+		};
+		return PostCreator(new CSocketCreatorListen(nPort, nConnections));	// Listenイベント発行
 	}
 	
 	// クライアントソケット作成(サーバ起動前)
-	template <class TYPE>	// TYPE: CIocpSocket派生クラス
-	BOOL AddConnection(const char* addr_v4, USHORT nPort)
+	template <class TYPE, class PRM1, class PRM2>	// TYPE: CIocpSocket派生クラス
+	BOOL AddConnection(PRM1 param1, PRM2 param2)	// param1: ホスト名, param2: ポート番号(プロトコル名)
 	{
-		struct CSocketCreatorConnect : public CSocketCreatorT<USHORT, ULONG>
+		struct CSocketCreatorConnect : public CSocketCreatorT<PRM1, PRM2>
 		{
-			CSocketCreatorConnect(USHORT nPort, ULONG ulAddr) : CSocketCreatorT(nPort, ulAddr)
+			CSocketCreatorConnect(const PRM1& param1, const PRM2& param2) : CSocketCreatorT(param1, param2)
 			{
 			}
 			BOOL Create(CSocketFactory* pFactry)	// (スレッドプール内から呼出)
 			{
-				return (pFactry->AddConnection<TYPE>(CSockAddrIn(m_param1, m_param2)) != NULL);
+				return (pFactry->AddConnection<TYPE>(m_param1, m_param2) != NULL);
 			}
-		};	// Connectイベント発行
-		return PostCreator(new CSocketCreatorConnect(nPort, inet_addr(addr_v4)));
+		private:
+			~CSocketCreatorConnect();	// new以外の生成を禁止
+		};
+		return PostCreator(new CSocketCreatorConnect(param1, param2));	// Connectイベント発行
 	}
 };

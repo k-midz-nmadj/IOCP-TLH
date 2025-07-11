@@ -263,7 +263,7 @@ BOOL CIocpServer::PostCreator(CSocketCreator* pCreator)
 		if (CreateIocp() && PostEvent(pCreator))	// IOCP作成、ユーザイベント発行
 			return TRUE;
 		
-		delete pCreator;
+		delete pCreator;	// エラー時は解放
 	}
 	return FALSE;
 }

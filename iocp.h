@@ -100,7 +100,6 @@ protected:
 			{
 				LPOVERLAPPED_ENTRY lpCPEntry = CPEntries + ulNumEntries;
 				while (--lpCPEntry >= CPEntries)	// 全エントリチェック
-				{
 					if (!lpCPEntry->lpOverlapped)
 					{
 						lpCPEntry->Internal = reinterpret_cast<ULONG_PTR>(pThread);
@@ -115,7 +114,7 @@ protected:
 						if (!pIO->OnCompletionIO(lpCPEntry))	// IO完了イベント発行
 							pThread->OnCancelIO(pIO);		// IOエラー時のイベント発行
 					}
-				}
+				
 				dwError = WAIT_IO_COMPLETION;	// 正常時もタイムアウト判定
 			}
 			else
