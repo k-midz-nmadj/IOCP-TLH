@@ -268,12 +268,12 @@ public:
 	}
 	
 	// クライアントソケット作成(サーバ起動前)
-	template <class TYPE, class PRM1, class PRM2>	// TYPE: CIocpSocket派生クラス
-	BOOL AddConnection(PRM1 param1, PRM2 param2)	// param1: ホスト名, param2: ポート番号(プロトコル名)
+	template <class TYPE, class HOST, class PORT>	// TYPE: CIocpSocket派生クラス
+	BOOL AddConnection(HOST host, PORT port)	// host: ホスト名, port: ポート番号(プロトコル名)
 	{
-		struct CSocketCreatorConnect : public CSocketCreatorT<PRM1, PRM2>
+		struct CSocketCreatorConnect : public CSocketCreatorT<HOST, PORT>
 		{
-			CSocketCreatorConnect(const PRM1& param1, const PRM2& param2) : CSocketCreatorT(param1, param2)
+			CSocketCreatorConnect(const HOST& host, const PORT& port) : CSocketCreatorT(host, port)
 			{
 			}
 			BOOL Create(CSocketFactory* pFactry)	// (スレッドプール内から呼出)
@@ -283,6 +283,6 @@ public:
 		private:
 			~CSocketCreatorConnect();	// new以外の生成を禁止
 		};
-		return PostCreator(new CSocketCreatorConnect(param1, param2));	// Connectイベント発行
+		return PostCreator(new CSocketCreatorConnect(host, port));	// Connectイベント発行
 	}
 };
