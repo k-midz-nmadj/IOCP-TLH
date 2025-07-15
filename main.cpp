@@ -67,18 +67,21 @@ class CIocpSocketClt : public CIocpSocket
 	}
 };
 
+// argv[1]:IPアドレス(ドメイン名), argv[2]:ポート番号(プロトコル名)
 int wmain(int argc, wchar_t *argv[])
 {
 	WSA_STARTUP	// Winsock初期化
 	CIocpServer svr;
 	
-	if (argc == 1 && !svr.AddListener<CIocpSocketSvr>(PORT_NUM))	// ポートオープン
+	if (argc == 1 && !svr.AddListener<CIocpSocketSvr>(PORT_NUM))	// サーバ用ポートオープン
 		return 0;
 	
-	if (!svr.AddConnection<CIocpSocketClt>(	// リモート接続(パラメータ省略時はローカル接続)
-				argc > 1 ? argv[1] : TEXT("127.0.0.1"), 
-				argc > 2 ? _wtoi(argv[2]) : PORT_NUM))
-				//argc > 2 ? argv[2] : TEXT("8090")))	// (ドメイン指定はUNICODE限定)
+	const wchar_t* addr = (argc > 1 ? argv[1] : L"127.0.0.1");	// パラメータ省略時はローカル接続
+	USHORT port = PORT_NUM;
+	
+	if (argc <= 2 || (port = _wtoi(argv[2])) ? 	// ポート番号取得(0:プロトコル名)
+		!svr.AddConnection<CIocpSocketClt>(addr, port) :	// リモート接続
+		!svr.AddConnection<CIocpSocketClt>(addr, argv[2]))	// ドメイン+プロトコル指定はUNICODE限定
 		return 0;
 	
 	printf("Connecting...\n");

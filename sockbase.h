@@ -27,39 +27,49 @@ struct CWSAStartup
 #define WSA_STARTUP CWSAStartup __wsu__;	// WinSock初期化マクロ
 
 // ソケットのアドレス情報(IPv4,IPv6共通)
-struct CSockAddrIn : public SOCKADDR_IN6
+struct CSockAddrIn
 {
+	union {
+		struct {	// 共通メンバ
+			ADDRESS_FAMILY sin_family;
+			USHORT sin_port;
+		};
+		SOCKADDR_IN Ipv4;
+		SOCKADDR_IN6 Ipv6;
+	};
+	
 	CSockAddrIn(USHORT port = 0, LPCTSTR addr = NULL)
 	{
 		::ZeroMemory(this, sizeof(*this));
-		sin6_family = AF_INET;
-		sin6_port = htons(port);
 		
-		if (addr)	// アドレス文字列をバイナリへ変換
-		{	 // IPv6の最短表記"::"(2) / IPv4の最短表記"x.x.x.x"(7)
-			if (lstrlen(addr) >= 7 && (addr[3] == '.' || addr[2] == '.' || addr[1] == '.'))
-				InetPton(AF_INET, addr, &sin6_flowinfo);	// flowinfo: SOCKADDR_IN::sin_addrと同位置
-			else
-				InetPton(sin6_family = AF_INET6, addr, &sin6_addr);
-		}
+		sin_port = htons(port);
+		sin_family = (addr &&
+			InetPton(AF_INET,  addr, &Ipv4.sin_addr) <= 0 && // アドレス文字列をバイナリへ変換
+			InetPton(AF_INET6, addr, &Ipv6.sin6_addr) > 0 ?  // IPv4で不正時はIPv6で再試行
+				AF_INET6 : AF_INET);
 	}
 	
 	// SOCKADDR構造体による初期化
 	CSockAddrIn(const SOCKADDR_IN& addr)
 	{
-		::CopyMemory(this, &addr, sizeof(addr));
+		Ipv4 = addr;
+	}
+	CSockAddrIn(const SOCKADDR_IN6& addr)
+	{
+		Ipv6 = addr;
 	}
 	
-	// キャスト演算子によるポートとアドレスの取得
+	// キャスト演算子によるポートとIPv4アドレスの取得
 	operator USHORT() const
 	{
-		return ntohs(sin6_port);
+		return ntohs(sin_port);
 	}
 	operator ULONG() const
 	{
-		return (sin6_family == AF_INET ? sin6_flowinfo : INADDR_NONE);
+		return (sin_family == AF_INET ? Ipv4.sin_addr.s_addr : INADDR_NONE);
 	}
 	
+	// SOCKADDR構造体へのキャスト
 	operator SOCKADDR*()
 	{
 		return reinterpret_cast<SOCKADDR*>(this);
@@ -68,31 +78,31 @@ struct CSockAddrIn : public SOCKADDR_IN6
 	{
 		return reinterpret_cast<const SOCKADDR*>(this);
 	}
-	
 	operator SOCKADDR_IN*()
 	{
-		return (sin6_family == AF_INET ? reinterpret_cast<SOCKADDR_IN*>(this) : 0);
+		return (sin_family == AF_INET ? &Ipv4 : 0);
 	}
-	operator const SOCKADDR_IN*() const
-	{
-		return (sin6_family == AF_INET ? reinterpret_cast<const SOCKADDR_IN*>(this) : 0);
-	}
-	
 	operator SOCKADDR_IN6*()
 	{
-		return (sin6_family == AF_INET6 ? reinterpret_cast<SOCKADDR_IN6*>(this) : 0);
+		return (sin_family == AF_INET6 ? &Ipv6 : 0);
 	}
-	operator const SOCKADDR_IN6*() const
+	operator SOCKADDR_IN&()
 	{
-		return (sin6_family == AF_INET6 ? reinterpret_cast<const SOCKADDR_IN6*>(this) : 0);
+		return Ipv4;
+	}
+	operator SOCKADDR_IN6&()
+	{
+		return Ipv6;
 	}
 	
 	// 代入演算子によるSOCKADDR構造体のコピー
 	const SOCKADDR_IN& operator =(const SOCKADDR_IN& addr)
 	{
-		::CopyMemory(this, &addr, sizeof(addr));
-		
-		return *(reinterpret_cast<SOCKADDR_IN*>(this));
+		return (Ipv4 = addr);
+	}
+	const SOCKADDR_IN6& operator =(const SOCKADDR_IN6& addr)
+	{
+		return (Ipv6 = addr);
 	}
 };
 
