@@ -53,7 +53,7 @@ protected:
 	
 	virtual int OnRead(DWORD dwBytes);	// 受信完了イベント
 	virtual int OnWrite(DWORD dwBytes);	// 送信完了イベント
-
+	
 public:
 	operator HANDLE();	// IOCP用のハンドル取得
 	
@@ -89,14 +89,15 @@ public:
 	
 	// ソケット作成(内部コンテナへの追加)
 	template <class TYPE>	// TYPE: CIocpSocket派生クラス
-	TYPE* CreateSocket(const CSockAddrIn* pAddr = NULL)
+	TYPE* CreateSocket(const CSockAddrIn* pAddr = NULL, int iType = SOCK_STREAM, int iProto = IPPROTO_TCP)
 	{
 		ISBASE_TYPE(TYPE, CIocpSocket);
 		TYPE* pSocket = m_listSocket.AddItem<TYPE>(this);	// ソケットを作成しリストに追加
 		
 		if (pSocket)
 		{
-			if (pSocket->Socket() && pSocket->Bind(pAddr ? *pAddr : CSockAddrIn()) &&
+			if (pSocket->Socket(pAddr ? pAddr->sin_family : AF_INET, iType, iProto) && 
+				pSocket->Bind(pAddr ? *pAddr : CSockAddrIn()) &&
 				m_pIocp->CreateIocp(pSocket))	// 作成したソケットをIOCPに関連付ける
 				pSocket->m_pThread = this;
 			else

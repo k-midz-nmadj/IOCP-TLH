@@ -4,8 +4,6 @@
 #include <stdio.h>
 #include "IocpServer.h"
 
-#define PORT_NUM 8090
-
 // IOCPソケット実装クラス(Echoサーバ)
 class CIocpSocketSvr : public CIocpSocket
 {
@@ -72,12 +70,13 @@ int wmain(int argc, wchar_t *argv[])
 {
 	WSA_STARTUP	// Winsock初期化
 	CIocpServer svr;
+	const wchar_t* addr = L"127.0.0.1";	// パラメータ省略時はEchoサーバにローカル接続
+	USHORT port = 8090;	// Echoサーバ用ポート
 	
-	if (argc == 1 && !svr.AddListener<CIocpSocketSvr>(PORT_NUM))	// サーバ用ポートオープン
+	if (argc > 1)
+		addr = argv[1];
+	else if (!svr.AddListener<CIocpSocketSvr>(port))	// Echoサーバオープン
 		return 0;
-	
-	const wchar_t* addr = (argc > 1 ? argv[1] : L"127.0.0.1");	// パラメータ省略時はローカル接続
-	USHORT port = PORT_NUM;
 	
 	if (argc <= 2 || (port = _wtoi(argv[2])) ? 	// ポート番号取得(0:プロトコル名)
 		!svr.AddConnection<CIocpSocketClt>(addr, port) :	// リモート接続
@@ -92,7 +91,7 @@ int wmain(int argc, wchar_t *argv[])
 // プログラムのデバッグ: F5 または [デバッグ] > [デバッグの開始] メニュー
 
 // 作業を開始するためのヒント: 
-//    1. ソリューション エクスプローラー ウィンドウを使用してファイルを追加/管理します 
+//   1. ソリューション エクスプローラー ウィンドウを使用してファイルを追加/管理します 
 //   2. チーム エクスプローラー ウィンドウを使用してソース管理に接続します
 //   3. 出力ウィンドウを使用して、ビルド出力とその他のメッセージを表示します
 //   4. エラー一覧ウィンドウを使用してエラーを表示します
