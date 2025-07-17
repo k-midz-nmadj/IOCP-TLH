@@ -40,8 +40,8 @@ protected:
 	}
 public:
 	CTLHeap(DWORD dwHeapOpt = HEAP_NO_SERIALIZE, DWORD dwInitSize = 0, DWORD dwMaxSize = 0)
+		: m_hHeap(::HeapCreate(dwHeapOpt, dwInitSize, dwMaxSize))	// デフォルトでNoLockヒープ作成
 	{
-		m_hHeap = ::HeapCreate(dwHeapOpt, dwInitSize, dwMaxSize);	// デフォルトでNoLockヒープ作成
 	}
 	~CTLHeap()
 	{
@@ -231,6 +231,16 @@ public:
 			pNode = pNode->pNext;
 			TALC::Free(pDel);
 		}
+	}
+	
+	int GetCount()	// 全要素数取得
+	{
+		DWORD nCount = 0;
+		
+		for (Node *pFind = m_Ring.pNext; pFind != &m_Ring; pFind = pFind->pNext)
+			++nCount;
+		
+		return nCount;
 	}
 	
 	BOOL IsEmpty()	// 空判定:TRUE

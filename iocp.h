@@ -19,9 +19,8 @@ protected:
 	DWORD m_dwLastTime;	// イベント発生した最終時間(ms)
 	THRD* m_pThread;	// イベント発生スレッド
 	
-	CIocpOverlapped() : m_dwLastTime(::GetTickCount()), m_pThread(NULL)
+	CIocpOverlapped() : m_ovl{}, m_dwLastTime(::GetTickCount()), m_pThread(NULL)
 	{
-		::ZeroMemory(&m_ovl, sizeof(m_ovl));
 	}
 public:
 	virtual BOOL OnCompletionIO(LPOVERLAPPED_ENTRY lpCPEntry) = 0;	// IO完了イベント

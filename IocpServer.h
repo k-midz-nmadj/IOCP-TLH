@@ -64,10 +64,6 @@ public:
 	BOOL Socket(int af = AF_INET, int type = SOCK_STREAM, int protocol = IPPROTO_TCP);	// 重複IOソケット作成
 	int Write(LPCVOID pBuff, int iSendSize);	// 非同期送信
 	BOOL Connect(const SOCKADDR* ai_addr, int ai_addrlen);	// クライアントの接続開始
-	BOOL Connect(const CSockAddrIn& addrRemote)
-	{
-		return Connect(addrRemote, sizeof(addrRemote));
-	}
 };
 
 // IOCP用ソケット作成クラス
@@ -177,7 +173,7 @@ public:
 		TYPE* pConnect = CreateSocket<TYPE>();	// クライアントソケット作成
 		
 		// ソケット作成に成功したら接続開始
-		if (pConnect && !pConnect->Connect(CSockAddrIn(nPort, pAddr)))
+		if (pConnect && !pConnect->Connect(CSockAddrIn(nPort, pAddr), sizeof(CSockAddrIn)))
 		{
 			DeleteSocket(pConnect, FALSE);	// 失敗時は削除
 			pConnect = NULL;

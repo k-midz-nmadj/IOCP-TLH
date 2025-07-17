@@ -38,10 +38,8 @@ struct CSockAddrIn
 		SOCKADDR_IN6 Ipv6;
 	};
 	
-	CSockAddrIn(USHORT port = 0, LPCTSTR addr = NULL)
+	CSockAddrIn(USHORT port = 0, LPCTSTR addr = NULL) : Ipv6{}
 	{
-		::ZeroMemory(this, sizeof(*this));
-		
 		sin_port = htons(port);
 		sin_family = (addr &&
 			InetPton(AF_INET,  addr, &Ipv4.sin_addr) <= 0 && // アドレス文字列をバイナリへ変換
