@@ -27,20 +27,19 @@ struct CWSAStartup
 #define WSA_STARTUP CWSAStartup __wsu__;	// WinSock初期化マクロ
 
 // ソケットのアドレス情報(IPv4,IPv6共通)
-struct CSockAddrIn
+union CSockAddrIn
 {
-	union {
-		struct {	// 共通メンバ
-			ADDRESS_FAMILY sin_family;
-			USHORT sin_port;
-		};
-		SOCKADDR_IN Ipv4;
-		SOCKADDR_IN6 Ipv6;
-	};
-	
-	CSockAddrIn(USHORT port = 0, LPCTSTR addr = NULL) : Ipv6{}
+	struct	// Inet共通メンバ
 	{
-		sin_port = htons(port);
+		ADDRESS_FAMILY sin_family;
+		USHORT sin_port;
+		CHAR sin_data[28];	// AcceptExで使用するための必須サイズ(32byte)定義
+	};
+	SOCKADDR_IN Ipv4;
+	SOCKADDR_IN6 Ipv6;
+	
+	CSockAddrIn(USHORT port = 0, LPCTSTR addr = NULL) : sin_port(htons(port)), sin_data{}
+	{
 		sin_family = (addr &&
 			InetPton(AF_INET,  addr, &Ipv4.sin_addr) <= 0 && // アドレス文字列をバイナリへ変換
 			InetPton(AF_INET6, addr, &Ipv6.sin6_addr) > 0 ?  // IPv4で不正時はIPv6で再試行
@@ -131,26 +130,26 @@ public:
 	
 	BOOL IsValid()	// ソケット有効:TRUE
 	{
-		return m_hSocket != INVALID_SOCKET;
+		return (m_hSocket != INVALID_SOCKET);
 	}
 	
 	BOOL Socket(int af = AF_INET, int type = SOCK_STREAM, int protocol = 0)
 	{
-		return m_hSocket == INVALID_SOCKET ?
-			((m_hSocket = socket(af, type, protocol)) != INVALID_SOCKET) : FALSE;
+		return (m_hSocket == INVALID_SOCKET ?
+			((m_hSocket = socket(af, type, protocol)) != INVALID_SOCKET) : FALSE);
 	}
 	BOOL Bind(const CSockAddrIn& addr)
 	{
-		return SOCKET_ERROR != bind(m_hSocket, addr, sizeof(addr));
+		return (SOCKET_ERROR != bind(m_hSocket, addr, sizeof(addr)));
 	}
 	
 	BOOL Listen(int nConnectionBacklog = SOMAXCONN)
 	{
-		return SOCKET_ERROR != listen(m_hSocket, nConnectionBacklog);
+		return (SOCKET_ERROR != listen(m_hSocket, nConnectionBacklog));
 	}
 	BOOL Connect(const CSockAddrIn& addr)
 	{
-		return SOCKET_ERROR != connect(m_hSocket, addr, sizeof(addr));
+		return (SOCKET_ERROR != connect(m_hSocket, addr, sizeof(addr)));
 	}
 	SOCKET Accept(CSockAddrIn& addr)
 	{
@@ -161,11 +160,11 @@ public:
 	{
 		SOCKET hSocket = m_hSocket;
 		m_hSocket = INVALID_SOCKET;	// 解放時はハンドルを初期値に戻す
-		return hSocket != INVALID_SOCKET ? (SOCKET_ERROR != closesocket(hSocket)) : FALSE;
+		return (hSocket != INVALID_SOCKET ? (SOCKET_ERROR != closesocket(hSocket)) : FALSE);
 	}
 	BOOL Shutdown(int iHow = SD_SEND)
 	{
-		return SOCKET_ERROR != shutdown(m_hSocket, iHow);
+		return (SOCKET_ERROR != shutdown(m_hSocket, iHow));
 	}
 	
 	int Send(LPCVOID pBuf, int iLen)
@@ -190,21 +189,21 @@ public:
 	BOOL GetPeerName(CSockAddrIn& addr)
 	{
 		int iNameLen = sizeof(addr);
-		return SOCKET_ERROR != getpeername(m_hSocket, addr, &iNameLen);
+		return (SOCKET_ERROR != getpeername(m_hSocket, addr, &iNameLen));
 	}
 	BOOL GetSockName(CSockAddrIn& addr)
 	{
 		int iNameLen = sizeof(addr);
-		return SOCKET_ERROR != getsockname(m_hSocket, addr, &iNameLen);
+		return (SOCKET_ERROR != getsockname(m_hSocket, addr, &iNameLen));
 	}
 	
 	BOOL SetSockOpt(int optname, const char* optval, int optlen)
 	{
-		return SOCKET_ERROR != setsockopt(m_hSocket, SOL_SOCKET, optname, optval, optlen);
+		return (SOCKET_ERROR != setsockopt(m_hSocket, SOL_SOCKET, optname, optval, optlen));
 	}
 	BOOL GetSockOpt(int optname, char* optval, int* optlen)
 	{
-		return SOCKET_ERROR != getsockopt(m_hSocket, SOL_SOCKET, optname, optval, optlen);
+		return (SOCKET_ERROR != getsockopt(m_hSocket, SOL_SOCKET, optname, optval, optlen));
 	}
 	
 	BOOL Ioctl(long cmd, u_long* argp)
