@@ -188,7 +188,7 @@ public:
 	}
 	
 	// 型とアロケータ(TLH)指定による要素追加
-	template <class ITEM = TYPE>	// TYPE: 構成要素の派生型
+	template <class ITEM = TYPE>	// ITEM: 構成要素の派生型
 	ITEM* AddItem(TALC* pAlc = NULL, BOOL bToHead = FALSE)
 	{
 		ISBASE_TYPE(ITEM, TYPE);
@@ -232,12 +232,10 @@ public:
 			TALC::Free(pDel);
 		}
 	}
-	
-	int GetCount()	// 全要素数取得
+	int GetCount()	// 全要素数取得(Node削除時に生成元Listのカウンタ参照不可)
 	{
 		DWORD nCount = 0;
-		
-		for (Node *pFind = m_Ring.pNext; pFind != &m_Ring; pFind = pFind->pNext)
+		for (Node* pFind = m_Ring.pNext; pFind != &m_Ring; pFind = pFind->pNext)
 			++nCount;
 		
 		return nCount;
