@@ -234,7 +234,7 @@ public:
 	}
 	int GetCount()	// 全要素数取得(Node削除時に生成元Listのカウンタ参照不可)
 	{
-		DWORD nCount = 0;
+		int nCount = 0;
 		for (Node* pFind = m_Ring.pNext; pFind != &m_Ring; pFind = pFind->pNext)
 			++nCount;
 		
