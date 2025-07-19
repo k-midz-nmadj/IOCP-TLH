@@ -63,7 +63,7 @@ public:
 	
 	BOOL Socket(int af = AF_INET, int type = SOCK_STREAM, int protocol = IPPROTO_TCP);	// 重複IOソケット作成
 	int Write(LPCVOID pBuff, int iSendSize);	// 非同期送信
-	BOOL Connect(const SOCKADDR* ai_addr, int ai_addrlen);	// クライアントの接続開始
+	BOOL Connect(const SOCKADDR* ai_addr, int ai_addrlen = sizeof(SOCKADDR));	// クライアントの接続開始
 };
 
 // IOCP用ソケット作成クラス
@@ -87,7 +87,6 @@ public:
 	template <class TYPE>	// TYPE: CIocpSocket派生クラス
 	TYPE* CreateSocket(const CSockAddrIn* pAddr = NULL, int iType = SOCK_STREAM, int iProto = IPPROTO_TCP)
 	{
-		ISBASE_TYPE(TYPE, CIocpSocket);
 		TYPE* pSocket = m_listSocket.AddItem<TYPE>(this);	// ソケットを作成しリストに追加
 		
 		if (pSocket)
@@ -137,7 +136,6 @@ public:
 		public:
 			BOOL Start()	// 接続受入れ(Accept)開始
 			{
-				ISBASE_TYPE(TYPE, CIocpSocket);
 				// ソケットを作成しリストに追加
 				if (IsPending() >= 0 && 	// 一時停止(IOSuspend)は受入れ再開
 					(m_pAccept = m_pThread->m_listSocket.AddItem<TYPE>(m_pThread)))
