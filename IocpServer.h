@@ -62,8 +62,8 @@ public:
 	int IsPending();		// イベント待機中判定
 	
 	BOOL Socket(int af = AF_INET, int type = SOCK_STREAM, int protocol = IPPROTO_TCP);	// 重複IOソケット作成
-	int Write(LPCVOID pBuff, int iSendSize);	// 非同期送信
 	BOOL Connect(const SOCKADDR* ai_addr, int ai_addrlen = sizeof(SOCKADDR));	// クライアントの接続開始
+	int Write(LPCVOID pBuff, int iSendSize);	// 非同期送信
 };
 
 // IOCP用ソケット作成クラス

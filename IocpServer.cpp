@@ -134,6 +134,30 @@ BOOL CIocpSocket::Socket(int af, int type, int protocol)
 	return FALSE;
 }
 
+// クライアントの接続開始
+BOOL CIocpSocket::Connect(const SOCKADDR* ai_addr, int ai_addrlen)
+{
+	if (IsPending())
+		return FALSE;	// IO要求済みなら接続無効
+	
+	LPFN_CONNECTEX lpfnConnectEx = NULL;
+	GUID guidConnectEx = WSAID_CONNECTEX;	// ConnectEx関数の識別子
+	DWORD dwBytes = 0;
+	
+	m_ioState = IOConnect;	// イベント状態更新
+	if (WSAIoctl(m_hSocket, SIO_GET_EXTENSION_FUNCTION_POINTER,
+				&guidConnectEx, sizeof(guidConnectEx),
+				&lpfnConnectEx, sizeof(lpfnConnectEx),
+				&dwBytes, NULL, NULL) == SOCKET_ERROR ||	// ConnectEx関数のポインタ取得
+		!lpfnConnectEx(m_hSocket, ai_addr, ai_addrlen, NULL, 0, &dwBytes, &m_ovl) &&
+		WSAGetLastError() != WSA_IO_PENDING)
+	{
+		m_ioState = IOInit;	// エラー時はイベント状態初期化
+		return FALSE;
+	}
+	return TRUE;
+}
+
 // 非同期送信
 int CIocpSocket::Write(LPCVOID pBuff, int iSendSize)
 {
@@ -169,30 +193,6 @@ int CIocpSocket::Write(LPCVOID pBuff, int iSendSize)
 		}
 	}
 	return iIoSize;
-}
-
-// クライアントの接続開始
-BOOL CIocpSocket::Connect(const SOCKADDR* ai_addr, int ai_addrlen)
-{
-	if (IsPending())
-		return FALSE;	// IO要求済みなら接続無効
-	
-	LPFN_CONNECTEX lpfnConnectEx = NULL;
-	GUID guidConnectEx = WSAID_CONNECTEX;	// ConnectEx関数の識別子
-	DWORD dwBytes = 0;
-	
-	m_ioState = IOConnect;	// イベント状態更新
-	if (WSAIoctl(m_hSocket, SIO_GET_EXTENSION_FUNCTION_POINTER,
-				&guidConnectEx, sizeof(guidConnectEx),
-				&lpfnConnectEx, sizeof(lpfnConnectEx),
-				&dwBytes, NULL, NULL) == SOCKET_ERROR ||	// ConnectEx関数のポインタ取得
-		!lpfnConnectEx(m_hSocket, ai_addr, ai_addrlen, NULL, 0, &dwBytes, &m_ovl) &&
-		WSAGetLastError() != WSA_IO_PENDING)
-	{
-		m_ioState = IOInit;	// エラー時はイベント状態初期化
-		return FALSE;
-	}
-	return TRUE;
 }
 
 
