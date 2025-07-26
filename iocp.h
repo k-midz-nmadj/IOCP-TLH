@@ -85,7 +85,7 @@ protected:
 		while (pThis->m_hIocp)	// IOCPハンドル有効時
 		{
 			ULONG ulNumEntries = 0;
-			OVERLAPPED_ENTRY CPEntries[NEnt] = {0};
+			OVERLAPPED_ENTRY CPEntries[NEnt] = {};
 			DWORD dwError = ::GetQueuedCompletionStatusEx(
 								pThis->m_hIocp,
 								CPEntries, NEnt, &ulNumEntries,
@@ -222,7 +222,7 @@ public:
 		
 		if (m_nThreadNum == 0)	// スレッド数が未設定ならCPU数をセット
 		{
-			SYSTEM_INFO systemInfo = { 0 };
+			SYSTEM_INFO systemInfo = {};
 			::GetSystemInfo(&systemInfo);
 			m_nThreadNum = systemInfo.dwNumberOfProcessors;
 		}

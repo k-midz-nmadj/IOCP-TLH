@@ -221,7 +221,7 @@ class CIocpServer : public CIocpServerBase
 protected:
 	struct CSocketCreator	// ソケット作成インターフェース
 	{
-		virtual BOOL Create(CSocketFactory* pFactry) = 0;
+		virtual CIocpSocket* Create(CSocketFactory* pFactory) = 0;
 	};
 	template <class PRM1, class PRM2>	// パラメータ格納用テンプレート
 	struct CSocketCreatorT : public CSocketCreator
@@ -248,9 +248,9 @@ public:
 			CSocketCreatorListen(USHORT nPort, int nConnections) : CSocketCreatorT(nPort, nConnections)
 			{
 			}
-			BOOL Create(CSocketFactory* pFactry)	// (スレッドプール内から呼出)
+			CIocpSocket* Create(CSocketFactory* pFactory)	// (スレッドプール内から呼出)
 			{
-				return (pFactry->AddListener<TYPE>(m_param1, m_param2) != NULL);
+				return pFactory->AddListener<TYPE>(m_param1, m_param2);
 			}
 		private:
 			~CSocketCreatorListen();	// new以外の生成を禁止
@@ -267,9 +267,9 @@ public:
 			CSocketCreatorConnect(const HOST& host, const PORT& port) : CSocketCreatorT(host, port)
 			{
 			}
-			BOOL Create(CSocketFactory* pFactry)	// (スレッドプール内から呼出)
+			CIocpSocket* Create(CSocketFactory* pFactory)	// (スレッドプール内から呼出)
 			{
-				return (pFactry->AddConnection<TYPE>(m_param1, m_param2) != NULL);
+				return pFactory->AddConnection<TYPE>(m_param1, m_param2);
 			}
 		private:
 			~CSocketCreatorConnect();	// new以外の生成を禁止
