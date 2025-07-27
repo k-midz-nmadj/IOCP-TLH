@@ -275,7 +275,9 @@ VOID CIocpServer::OnPostEvent(LPOVERLAPPED_ENTRY lpCPEntry)
 	
 	if (pCreator)	// ソケット作成をスレッドプールで非同期実行
 	{
-		pCreator->Create(reinterpret_cast<CSocketFactory*>(lpCPEntry->Internal));
+		CIocpSocket* pSocket = pCreator->Create(reinterpret_cast<CSocketFactory*>(lpCPEntry->Internal));
+		
+		lpCPEntry->lpCompletionKey = reinterpret_cast<ULONG_PTR>(pSocket);
 		delete pCreator;
 	}
 }
