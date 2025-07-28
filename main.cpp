@@ -69,7 +69,7 @@ class CIocpSocketClt : public CIocpSocket
 int wmain(int argc, wchar_t *argv[])
 {
 	WSA_STARTUP	// Winsock初期化
-	CIocpServer svr;
+	CIocpServer svr(argc > 1);	// サーバ起動時はマルチスレッド
 	const wchar_t* addr = L"127.0.0.1";	// パラメータ省略時はEchoサーバにローカル接続
 	USHORT port = 8090;	// Echoサーバ用ポート
 	
