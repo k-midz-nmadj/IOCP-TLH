@@ -261,17 +261,17 @@ public:
 		m_dwMinKeepAlive = (nKeepAlive <= INFINITE / 2 ? nKeepAlive : INFINITE);
 		
 		DWORD nThreadCnt, nThreadNum = m_nThreadNum - bSync;	// 最終スレッドは同期(終了待機)に割当
-		for (nThreadCnt = 0; nThreadCnt < nThreadNum; ++nThreadCnt)
-			// 各スレッドを非同期実行
-			if (!m_pThreads[nThreadCnt].BeginThread(WaitForIocp))
-			{	// 起動エラー時
-				JoinThread(nThreadCnt);	// 実行スレッドがあれば終了待機
-				m_nThreadCnt = 0;
-				return FALSE;
-			}
+		for (nThreadCnt = 0; 	// 各スレッドを非同期実行
+			 nThreadCnt < nThreadNum && m_pThreads[nThreadCnt].BeginThread(WaitForIocp);
+			 ++nThreadCnt);
 		
-		// 同期時は終了まで待機
-		return (bSync ? m_pThreads[nThreadNum].BeginThread(WaitForIocp, NULL, TRUE) : TRUE);
+		if (nThreadCnt < nThreadNum || 	// 起動エラー
+			bSync && m_pThreads[nThreadNum].BeginThread(WaitForIocp, NULL, TRUE))	// 同期時は待機
+		{
+			JoinThread(nThreadCnt);	// 実行スレッドがあれば終了待機
+			m_nThreadCnt = 0;
+		}
+		return (nThreadCnt == nThreadNum);
 	}
 	
 	// スレッドプールの実行終了
