@@ -134,7 +134,8 @@ protected:
 		}
 		// IOCPハンドル解放による終了時、スレッド数をカウントダウン
 		pThread = pThis->m_pThreads;
-		if (pThread && ::InterlockedDecrement(&pThis->m_nThreadCnt) == 0)
+		dwLastTime = ::InterlockedDecrement(&pThis->m_nThreadCnt);
+		if (dwLastTime == 0 && pThread)
 			delete[] pThread;	// 全終了でスレッド配列を解放
 		
 		return dwLastTime;	// 待機終了
@@ -239,8 +240,7 @@ public:
 			m_nThreadNum = systemInfo.dwNumberOfProcessors;
 		}
 		
-		// スレッドプール作成(同時にSuspendするスレッドの最大数を加算: m_nThreadNum += N)
-		m_pThreads = new THRD[m_nThreadNum];
+		m_pThreads = new THRD[m_nThreadNum];	// スレッドプール作成
 		if (!m_pThreads)
 			return FALSE;
 		
@@ -262,7 +262,7 @@ public:
 		
 		DWORD nThreadCnt, nThreadNum = m_nThreadNum - bSync;	// 最終スレッドは同期(終了待機)に割当
 		for (nThreadCnt = 0; 	// 各スレッドを非同期実行
-			 nThreadCnt < nThreadNum && m_pThreads[nThreadCnt].BeginThread(WaitForIocp);
+			 nThreadCnt < nThreadNum && m_pThreads[nThreadCnt].BeginThread(WaitForIocp) != -1;
 			 ++nThreadCnt);
 		
 		if (nThreadCnt < nThreadNum || 	// 起動エラー

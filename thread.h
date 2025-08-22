@@ -36,7 +36,7 @@ public:
 	}
 	
 	// 関数とパラメータ指定によるスレッド起動(bSync=TRUE: 関数を同期呼出し)
-	BOOL BeginThread(LPTHREAD_START_ROUTINE pfnThread, LPVOID pParam = NULL, BOOL bSync = FALSE)
+	DWORD BeginThread(LPTHREAD_START_ROUTINE pfnThread, LPVOID pParam = NULL, BOOL bSync = FALSE)
 	{
 		if (m_hThread)
 			return FALSE;	// スレッド作成済み
@@ -48,7 +48,7 @@ public:
 			m_dwThreadID = ::GetCurrentThreadId();
 			m_hThread = ::OpenThread(THREAD_ALL_ACCESS, FALSE, m_dwThreadID);
 			
-			return (m_hThread ? pfnThread(pParam) != -1 : FALSE);	// 関数終了までブロック
+			return (m_hThread ? pfnThread(pParam) : -1);	// 関数終了までブロック
 		}
 #ifdef _INC_PROCESS
 		m_hThread = (HANDLE)::_beginthreadex(NULL, 0, (_beginthreadex_proc_type)pfnThread, pParam, 
@@ -56,7 +56,7 @@ public:
 #else
 		m_hThread = ::CreateThread(NULL, 0, pfnThread, pParam, CREATE_SUSPENDED, &m_dwThreadID);
 #endif
-		return (m_hThread ? ::ResumeThread(m_hThread) != -1 : FALSE);	// ハンドルとIDを取得してから起動
+		return (m_hThread ? ::ResumeThread(m_hThread) : -1);	// ハンドルとIDを取得してから起動
 	}
 	
 	// 別スレッドからの外部ハンドル割当(パラメータ省略時はハンドル解放)
