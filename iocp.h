@@ -265,13 +265,14 @@ public:
 			 nThreadCnt < nThreadNum && m_pThreads[nThreadCnt].BeginThread(WaitForIocp) != -1;
 			 ++nThreadCnt);
 		
-		if (nThreadCnt < nThreadNum || 	// 起動エラー
-			bSync && m_pThreads[nThreadNum].BeginThread(WaitForIocp, NULL, TRUE))	// 同期時は待機
+		LONG iErr = nThreadCnt - nThreadNum;
+		if (iErr < 0 || 	// 起動エラー
+			bSync && (iErr = m_pThreads[nThreadNum].BeginThread(WaitForIocp, NULL, TRUE)))	// 同期時は待機
 		{
 			JoinThread(nThreadCnt);	// 実行スレッドがあれば終了待機
 			m_nThreadCnt = 0;
 		}
-		return (nThreadCnt == nThreadNum);
+		return (iErr >= 0);
 	}
 	
 	// スレッドプールの実行終了
