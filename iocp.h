@@ -260,19 +260,19 @@ public:
 		// タイムアウト時間設定(最大タイムアウト値/2以上は無効)
 		m_dwMinKeepAlive = (nKeepAlive <= INFINITE / 2 ? nKeepAlive : INFINITE);
 		
-		DWORD nThreadCnt, nThreadNum = m_nThreadNum - bSync;	// 最終スレッドは同期(終了待機)に割当
+		LONG nThreadCnt, nThreadNum = m_nThreadNum - bSync;	// 最終スレッドは同期(終了待機)に割当
 		for (nThreadCnt = 0; 	// 各スレッドを非同期実行
 			 nThreadCnt < nThreadNum && m_pThreads[nThreadCnt].BeginThread(WaitForIocp) != -1;
 			 ++nThreadCnt);
 		
-		LONG iErr = nThreadCnt - nThreadNum;
-		if (iErr < 0 || 	// 起動エラー
-			bSync && (iErr = m_pThreads[nThreadNum].BeginThread(WaitForIocp, NULL, TRUE)))	// 同期時は待機
+		nThreadNum = nThreadCnt - nThreadNum;
+		if (nThreadNum < 0 || 	// 起動エラー
+			bSync && (nThreadNum = m_pThreads[nThreadCnt].BeginThread(WaitForIocp, NULL, TRUE)))// 同期時は待機
 		{
 			JoinThread(nThreadCnt);	// 実行スレッドがあれば終了待機
 			m_nThreadCnt = 0;
 		}
-		return (iErr >= 0);
+		return (nThreadNum >= 0);
 	}
 	
 	// スレッドプールの実行終了
