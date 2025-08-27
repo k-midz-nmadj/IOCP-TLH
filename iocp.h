@@ -138,7 +138,7 @@ protected:
 		if (dwLastTime == 0 && pThread)
 			delete[] pThread;	// 全終了でスレッド配列を解放
 		
-		return dwLastTime;	// 待機終了
+		return dwLastTime;	// 残スレッド数返却
 	}
 	
 	// スレッドプール終了待機
