@@ -205,23 +205,6 @@ CSocketFactory::~CSocketFactory()
 	BindThread();	// リストコンテナより先にスレッドを解放し、ソケット解放時のAPCを無効化
 }
 
-// ソケット検索
-BOOL CSocketFactory::FindSocket(CIocpSocket* pFind)
-{
-	CIocpSocket* pSocket;
-	CSocketList::Node* pItr = m_listSocket.GetHead();	// リスト先頭取得
-	
-	while ((pSocket = m_listSocket.GetNext(pItr)) && pSocket != pFind);
-	
-	return (pSocket != NULL);	// ソケット検出:TRUE
-}
-
-// ソケット削除
-BOOL CSocketFactory::DeleteSocket(CIocpSocket* pSocket, BOOL bFind)
-{
-	return m_listSocket.DeleteItem(pSocket, bFind);	// ソケット検出有効
-}
-
 // IOキャンセルイベント
 VOID CSocketFactory::OnCancelIO(CSocketOverlapped* pIO)
 {
@@ -248,6 +231,23 @@ VOID CSocketFactory::OnTimeout(DWORD dwCurrentTime)
 			!pSocket->OnTimeout())	// 各ソケットのタイムアウトイベント発行
 			m_listSocket.DeleteItem(pSocket);	// 戻り値=FALSE:ソケット削除
 	}
+}
+
+// ソケット検索
+BOOL CSocketFactory::FindSocket(CIocpSocket* pFind)
+{
+	CIocpSocket* pSocket;
+	CSocketList::Node* pItr = m_listSocket.GetHead();	// リスト先頭取得
+	
+	while ((pSocket = m_listSocket.GetNext(pItr)) && pSocket != pFind);
+	
+	return (pSocket != NULL);	// ソケット検出:TRUE
+}
+
+// ソケット削除
+BOOL CSocketFactory::DeleteSocket(CIocpSocket* pSocket, BOOL bFind)
+{
+	return m_listSocket.DeleteItem(pSocket, bFind);	// ソケット検出有効
 }
 
 

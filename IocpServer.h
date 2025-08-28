@@ -69,19 +69,20 @@ public:
 // IOCP用ソケット作成クラス
 class CSocketFactory : public CTLHeap<CSocketThread>
 {
+	friend class CIocpThreadPool<CSocketFactory>;
 protected:
 	typedef CTLHList<CIocpSocket, CTLHeap> CSocketList;
 	CSocketList m_listSocket;	// ソケットリストコンテナ
 	
-public:
 	CSocketFactory(DWORD dwHeapOpt = HEAP_NO_SERIALIZE);
 	~CSocketFactory();
 	
-	BOOL FindSocket(CIocpSocket* pSocket);	// ソケット検索
-	BOOL DeleteSocket(CIocpSocket* pSocket, BOOL bFind = TRUE);// ソケット削除
-	
 	VOID OnCancelIO(CSocketOverlapped* pIO);// IOキャンセルイベント
 	VOID OnTimeout(DWORD dwCurrentTime);	// タイムアウトイベント
+	
+public:
+	BOOL FindSocket(CIocpSocket* pSocket);	// ソケット検索
+	BOOL DeleteSocket(CIocpSocket* pSocket, BOOL bFind = TRUE);// ソケット削除
 	
 	// ソケット作成(内部コンテナへの追加)
 	template <class TYPE>	// TYPE: CIocpSocket派生クラス
