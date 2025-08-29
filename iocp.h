@@ -73,7 +73,6 @@ protected:
 	HANDLE m_hIocp;			// IOCPハンドル
 	DWORD m_dwMinKeepAlive;	// 最小接続維持時間(ms)
 	DWORD m_nThreadNum;		// スレッド数
-	LONG  m_nThreadCnt;		// スレッド終了カウンタ
 	THRD* m_pThreads;		// スレッド配列
 	
 	// ユーザイベントのデフォルト実装
@@ -132,38 +131,40 @@ protected:
 				dwLastTime = dwCurrentTime;
 			}
 		}
-		// IOCPハンドル解放による終了時、スレッド数をカウントダウン
-		pThread = pThis->m_pThreads;
-		dwLastTime = ::InterlockedDecrement(&pThis->m_nThreadCnt);
-		if (dwLastTime == 0 && pThread)
-			delete[] pThread;	// 全終了でスレッド配列を解放
-		
-		return dwLastTime;	// 残スレッド数返却
+		return THRD::NEnt;
 	}
 	
 	// スレッドプール終了待機
 	BOOL JoinThread(DWORD nThreadNum)
 	{
-		Stop();	// スレッドプールを停止しカウントダウン無効化
-		if (nThreadNum > m_nThreadNum || ::InterlockedExchange(&m_nThreadCnt, -1) <= 0)
-			return FALSE;
+		// IOCPハンドルのクリア判定で再入防止(IOCPが再作成される可能性を考慮し、NULLクリアはNG)
+		HANDLE hIocp = ::InterlockedExchangePointer(&m_hIocp, INVALID_HANDLE_VALUE);
+		if (hIocp != INVALID_HANDLE_VALUE && hIocp)
+			::CloseHandle(hIocp);	// IOCP解放によりスレッド終了
 		
-		if (m_pThreads->m_hThread)	// 実行中なら待機状態へ
+		if (!m_pThreads || nThreadNum > m_nThreadNum)
+			return FALSE;	// スレッド未実行か範囲外
+		
+		if (m_pThreads->m_hThread)	// スレッドプール実行中
 		{
-			DWORD nThreadCnt, nTplCnt;
+			DWORD nThreadCnt;
 			DWORD dwCrtThreadId = ::GetCurrentThreadId();
 			LPHANDLE phThreadPool = static_cast<LPHANDLE>(alloca(sizeof(HANDLE) * nThreadNum));
 			
 			// 待機用スレッドハンドルの配列作成
-			for (nThreadCnt = nTplCnt = 0; nThreadCnt < nThreadNum; ++nThreadCnt)
-				if (dwCrtThreadId != m_pThreads[nThreadCnt].m_dwThreadID)	// 自スレッドは除外
-					phThreadPool[nTplCnt++] = m_pThreads[nThreadCnt].m_hThread;
+			for (nThreadCnt = 0;
+				 nThreadCnt < nThreadNum && dwCrtThreadId != m_pThreads[nThreadCnt].m_dwThreadID;
+				 ++nThreadCnt)
+				phThreadPool[nThreadCnt] = m_pThreads[nThreadCnt].m_hThread;	// 自スレッドは除外
 			
-			// スレッドプール(自スレッドを除く)の終了待機
-			if (nTplCnt > 0)
-				::WaitForMultipleObjects(nTplCnt, phThreadPool, TRUE, INFINITE);
+			if (nThreadCnt < nThreadNum || ::InterlockedExchange(&m_nThreadNum, 0) == 0)
+				return TRUE;	// スレッドプール内で終了(再入による重複待機を除外)
+			
+			// スレッドプール外で終了なら待機
+			::WaitForMultipleObjects(nThreadCnt, phThreadPool, TRUE, INFINITE);
 		}
 		delete[] m_pThreads;	// 全終了でスレッド配列を解放
+		m_pThreads = NULL;
 		
 		return TRUE;
 	}
@@ -172,27 +173,26 @@ public:
 		m_hIocp(INVALID_HANDLE_VALUE),
 		m_dwMinKeepAlive(INFINITE),
 		m_nThreadNum(TRUNC_WAIT_OBJECTS(nThreadNum)),
-		m_nThreadCnt(0),
 		m_pThreads(NULL)
 	{
 	}
 	~CIocpThreadPool()
 	{
-		JoinThread(m_nThreadNum);	// スレッドプール終了待機
+		Stop();	// スレッドプール終了待機
 	}
 	
 	BOOL IsRunning()	// スレッド実行中判定
 	{
-		return (m_nThreadCnt > 0 && m_pThreads->m_hThread);
+		return (m_pThreads && m_pThreads->m_hThread);
 	}
 	
 	DWORD GetThreadCount()	// 実行スレッド数取得
 	{
-		return (m_nThreadCnt > 0 ? m_nThreadCnt : 0);
+		return (m_pThreads ? m_nThreadNum : 0);
 	}
 	THRD* GetThread(DWORD nThreadNum = 0)	// 実行スレッド取得
 	{
-		return ((m_nThreadCnt > 0 || CreateThreadPool()) && nThreadNum < m_nThreadNum ? 
+		return ((m_pThreads || CreateThreadPool()) && nThreadNum < m_nThreadNum ? 
 				&m_pThreads[nThreadNum] : NULL);
 	}
 	
@@ -209,7 +209,7 @@ public:
 		
 		if (m_hIocp == INVALID_HANDLE_VALUE || !m_hIocp)	// 初回か前回エラー時はIOCP作成
 		{
-			if (m_nThreadCnt)
+			if (m_pThreads)
 				return FALSE;	// スレッド起動中は作成無効
 			
 			hIo = (pIO ? *pIO : INVALID_HANDLE_VALUE);	// IOハンドルがあれば指定
@@ -230,7 +230,7 @@ public:
 	// スレッドプールの作成
 	BOOL CreateThreadPool(DWORD nThreadNum = 0)
 	{
-		if (m_nThreadCnt || !CreateIocp(NULL, nThreadNum))	// IOCPがなければ作成
+		if (m_pThreads || !CreateIocp(NULL, nThreadNum))	// IOCPがなければ作成
 			return FALSE;	// スレッドプール実行中
 		
 		if (m_nThreadNum == 0)	// スレッド数が未設定ならCPU数をセット
@@ -244,7 +244,6 @@ public:
 		if (!m_pThreads)
 			return FALSE;
 		
-		m_nThreadCnt = m_nThreadNum;	// スレッドカウンタ初期化
 		for (DWORD nThreadCnt = 0; nThreadCnt < m_nThreadNum; ++nThreadCnt)
 			m_pThreads[nThreadCnt].m_pIocp = this;	// 各スレッドからのIOCP参照
 		
@@ -254,7 +253,7 @@ public:
 	// スレッドプールの実行開始(bSync: 同期/非同期)
 	BOOL Start(DWORD nKeepAlive = INFINITE, BOOL bSync = TRUE)
 	{
-		if (m_nThreadCnt <= 0 && !CreateThreadPool() || m_pThreads->m_hThread)	// スレッドプールがなければ作成
+		if (!m_pThreads && !CreateThreadPool() || m_pThreads->m_hThread)	// スレッドプールがなければ作成
 			return FALSE;	// スレッドプール実行中
 		
 		// タイムアウト時間設定(最大タイムアウト値/2以上は無効)
@@ -268,20 +267,14 @@ public:
 		nThreadNum = nThreadCnt - nThreadNum;
 		if (nThreadNum < 0 || 	// 起動エラー
 			bSync && (nThreadNum = m_pThreads[nThreadCnt].BeginThread(WaitForIocp, NULL, TRUE)))// 同期時は待機
-		{
 			JoinThread(nThreadCnt);	// 実行スレッドがあれば終了待機
-			m_nThreadCnt = 0;
-		}
+		
 		return (nThreadNum >= 0);
 	}
 	
 	// スレッドプールの実行終了
 	BOOL Stop()
 	{
-		// IOCPハンドルのクリア判定で再入防止(IOCPが再作成される可能性を考慮し、NULLクリアはNG)
-		HANDLE hIocp = ::InterlockedExchangePointer(&m_hIocp, INVALID_HANDLE_VALUE);
-		
-		// IOCP解放によりスレッド終了
-		return (hIocp && hIocp != INVALID_HANDLE_VALUE ? ::CloseHandle(hIocp) : FALSE);
+		return JoinThread(m_nThreadNum);	// スレッドプール外なら終了まで待機
 	}
 };
