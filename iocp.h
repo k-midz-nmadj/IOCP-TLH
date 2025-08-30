@@ -145,7 +145,7 @@ protected:
 		if (!m_pThreads || nThreadNum > m_nThreadNum)
 			return FALSE;	// スレッド未実行か範囲外
 		
-		if (m_pThreads->m_hThread)	// スレッドプール実行中
+		if (nThreadNum && m_pThreads->m_hThread)	// スレッドプール実行中
 		{
 			DWORD nThreadCnt;
 			DWORD dwCrtThreadId = ::GetCurrentThreadId();
