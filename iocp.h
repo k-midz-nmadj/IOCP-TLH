@@ -188,7 +188,7 @@ public:
 	
 	DWORD GetThreadCount()	// 実行スレッド数取得
 	{
-		return (m_pThreads ? m_nThreadNum : 0);
+		return m_nThreadNum;
 	}
 	THRD* GetThread(DWORD nThreadNum = 0)	// 実行スレッド取得
 	{
