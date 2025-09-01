@@ -143,7 +143,7 @@ protected:
 			::CloseHandle(hIocp);	// IOCP解放によりスレッド終了
 		
 		if (!m_pThreads || nThreadNum > m_nThreadNum)
-			return FALSE;	// スレッド未実行か範囲外
+			return FALSE;	// スレッド未作成か範囲外
 		
 		if (nThreadNum && m_pThreads->m_hThread)	// スレッドプール実行中
 		{
@@ -157,8 +157,8 @@ protected:
 				 ++nThreadCnt)
 				phThreadPool[nThreadCnt] = m_pThreads[nThreadCnt].m_hThread;	// 自スレッドは除外
 			
-			if (nThreadCnt < nThreadNum || ::InterlockedExchange(&m_nThreadNum, 0) == 0)
-				return TRUE;	// スレッドプール内で終了(再入による重複待機を除外)
+			if (nThreadCnt < nThreadNum)
+				return TRUE;	// スレッドプール内で終了
 			
 			// スレッドプール外で終了なら待機
 			::WaitForMultipleObjects(nThreadCnt, phThreadPool, TRUE, INFINITE);
@@ -188,7 +188,7 @@ public:
 	
 	DWORD GetThreadCount()	// 実行スレッド数取得
 	{
-		return m_nThreadNum;
+		return (m_pThreads ? m_nThreadNum : 0);
 	}
 	THRD* GetThread(DWORD nThreadNum = 0)	// 実行スレッド取得
 	{
