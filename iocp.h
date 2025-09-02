@@ -147,21 +147,18 @@ protected:
 		
 		if (nThreadNum && m_pThreads->m_hThread)	// スレッドプール実行中
 		{
-			DWORD nThreadCnt;
 			DWORD dwCrtThreadId = ::GetCurrentThreadId();
 			LPHANDLE phThreadPool = static_cast<LPHANDLE>(alloca(sizeof(HANDLE) * nThreadNum));
 			
 			// 待機用スレッドハンドルの配列作成
-			for (nThreadCnt = 0;
-				 nThreadCnt < nThreadNum && dwCrtThreadId != m_pThreads[nThreadCnt].m_dwThreadID;
-				 ++nThreadCnt)
-				phThreadPool[nThreadCnt] = m_pThreads[nThreadCnt].m_hThread;	// 自スレッドは除外
-			
-			if (nThreadCnt < nThreadNum)
-				return TRUE;	// スレッドプール内で終了
+			for (DWORD nThreadCnt = 0;  nThreadCnt < nThreadNum; ++nThreadCnt)
+				if (dwCrtThreadId != m_pThreads[nThreadCnt].m_dwThreadID)
+					phThreadPool[nThreadCnt] = m_pThreads[nThreadCnt].m_hThread;	// 自スレッドは除外
+				else
+					return TRUE;	// スレッドプール内で終了
 			
 			// スレッドプール外で終了なら待機
-			::WaitForMultipleObjects(nThreadCnt, phThreadPool, TRUE, INFINITE);
+			::WaitForMultipleObjects(nThreadNum, phThreadPool, TRUE, INFINITE);
 		}
 		delete[] m_pThreads;	// 全終了でスレッド配列を解放
 		m_pThreads = NULL;
