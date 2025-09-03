@@ -71,7 +71,7 @@ protected:
 	typedef typename THRD::TOVL TOVL;
 	
 	HANDLE m_hIocp;			// IOCPハンドル
-	DWORD m_dwMinKeepAlive;	// 最小接続維持時間(ms)
+	DWORD m_dwMinWaitTime;	// 最小待機時間(ms)
 	DWORD m_nThreadNum;		// スレッド数
 	THRD* m_pThreads;		// スレッド配列
 	
@@ -94,7 +94,7 @@ protected:
 			DWORD dwError = ::GetQueuedCompletionStatusEx(
 								pThis->m_hIocp,
 								CPEntries, THRD::NEnt, &ulNumEntries,
-								pThis->m_dwMinKeepAlive, TRUE),	// APC有効化(Alert状態)で待機
+								pThis->m_dwMinWaitTime, TRUE),	// APC有効化(Alert状態)で待機
 			      dwCurrentTime = ::GetTickCount();
 			if (dwError)
 			{
@@ -124,7 +124,7 @@ protected:
 			switch (dwError)	// エラー判定(ERROR_ABANDONED_WAIT_0, ERROR_INVALID_HANDLE)
 			{
 			case WAIT_IO_COMPLETION:	// APC実行時はタイムアウト判定
-				if (DIFF_TIME(dwCurrentTime, dwLastTime) <= pThis->m_dwMinKeepAlive)
+				if (DIFF_TIME(dwCurrentTime, dwLastTime) <= pThis->m_dwMinWaitTime)
 					break;
 			case WAIT_TIMEOUT:	// タイムアウトイベント発行
 				pThread->OnTimeout(dwCurrentTime);
@@ -168,7 +168,7 @@ protected:
 public:
 	CIocpThreadPool(DWORD nThreadNum = 0) : 
 		m_hIocp(INVALID_HANDLE_VALUE),
-		m_dwMinKeepAlive(INFINITE),
+		m_dwMinWaitTime(INFINITE),
 		m_nThreadNum(TRUNC_WAIT_OBJECTS(nThreadNum)),
 		m_pThreads(NULL)
 	{
@@ -248,13 +248,13 @@ public:
 	}
 	
 	// スレッドプールの実行開始(bSync: 同期/非同期)
-	BOOL Start(DWORD nKeepAlive = INFINITE, BOOL bSync = TRUE)
+	BOOL Start(DWORD nWaitTime = INFINITE, BOOL bSync = TRUE)
 	{
 		if (!m_pThreads && !CreateThreadPool() || m_pThreads->m_hThread)	// スレッドプールがなければ作成
 			return FALSE;	// スレッドプール実行中
 		
 		// タイムアウト時間設定(最大タイムアウト値/2以上は無効)
-		m_dwMinKeepAlive = (nKeepAlive <= INFINITE / 2 ? nKeepAlive : INFINITE);
+		m_dwMinWaitTime = (nWaitTime <= INFINITE / 2 ? nWaitTime : INFINITE);
 		
 		LONG nThreadCnt, nThreadNum = m_nThreadNum - bSync;	// 最終スレッドは同期(終了待機)に割当
 		for (nThreadCnt = 0; 	// 各スレッドを非同期実行
