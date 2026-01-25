@@ -93,7 +93,7 @@ public:
 		if (pSocket)
 		{
 			if (pSocket->Socket(pAddr ? pAddr->sin_family : AF_INET, iType, iProto) && 
-				pSocket->Bind(pAddr ? *pAddr : CSockAddrIn()) &&
+				(!pAddr || pSocket->Bind(*pAddr)) &&	// Accept時はBindなし
 				m_pIocp->CreateIocp(pSocket))	// 作成したソケットをIOCPに関連付ける
 				pSocket->m_pThread = this;
 			else
@@ -126,8 +126,7 @@ public:
 						Stop();	// 戻り値=FALSEでAccept停止
 					
 					// ソケット有効時は、IOCPに関連付けて受信開始
-					if (m_pAccept->IsValid() && m_pThread->m_pIocp->CreateIocp(m_pAccept) &&
-						(m_pAccept->IsPending() || m_pAccept->Start()))
+					if (m_pAccept->IsValid() && (m_pAccept->IsPending() || m_pAccept->Start()))
 						return TRUE;
 				}
 				CSocketList::Delete(m_pAccept);
@@ -137,16 +136,14 @@ public:
 		public:
 			BOOL Start()	// 接続受入れ(Accept)開始
 			{
-				// ソケットを作成しリストに追加
-				if (IsPending() >= 0 && 	// 一時停止(IOSuspend)は受入れ再開
-					(m_pAccept = m_pThread->m_listSocket.AddItem<TYPE>(m_pThread)))
+				// ソケットを作成しリストに追加(IOSuspendは受入れ再開)
+				if (IsPending() >= 0 && (m_pAccept = m_pThread->CreateSocket<TYPE>()))
 				{
 					m_ioState = IOAccept;	// イベント状態更新
-					if (m_pAccept->Socket() && 	// ソケット作成成功
-						(AcceptEx(m_hSocket, *m_pAccept, 
+					if (AcceptEx(m_hSocket, *m_pAccept, 
 								&m_addrRemote, 0, 0, sizeof(m_addrRemote), 
 								NULL, &m_ovl) ||
-								WSAGetLastError() == WSA_IO_PENDING))
+								WSAGetLastError() == WSA_IO_PENDING)
 						return TRUE;
 					
 					m_ioState = IOInit;	// エラー時はイベント状態初期化
@@ -169,7 +166,7 @@ public:
 	template <class TYPE>	// TYPE: CIocpSocket派生クラス
 	TYPE* AddConnection(LPCTSTR pAddr, USHORT nPort)
 	{
-		TYPE* pConnect = CreateSocket<TYPE>();	// クライアントソケット作成
+		TYPE* pConnect = CreateSocket<TYPE>(&CSockAddrIn());	// クライアントソケット作成
 		
 		// ソケット作成に成功したら接続開始
 		if (pConnect && !pConnect->Connect(CSockAddrIn(nPort, pAddr), sizeof(CSockAddrIn)))
@@ -201,7 +198,7 @@ public:
 				
 				FreeAddrInfoEx(*ppResult);	// 取得したアドレス情報(ADDRINFOEX)を解放
 			}
-		} *pConnect = CreateSocket<CAddrInfoQuery>();	// クライアントソケット作成
+		} *pConnect = CreateSocket<CAddrInfoQuery>(&CSockAddrIn());	// クライアントソケット作成
 		HANDLE hCancel;
 		
 		// ドメイン名、サービス名による名前解決を非同期(重複IO)で実行(UNICODE版限定)
