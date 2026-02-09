@@ -183,8 +183,8 @@ public:
 		m_bSync(FALSE),
 		m_pThreads(NULL)
 	{
-		if (m_nThreadNum > 0)
-			CreateThreadPool(m_nThreadNum);
+		if (nThreadNum > 0)
+			CreateThreadPool(nThreadNum);
 	}
 	~CIocpThreadPool()
 	{
