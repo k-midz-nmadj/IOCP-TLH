@@ -73,7 +73,7 @@ protected:
 	HANDLE m_hIocp;			// IOCPハンドル
 	DWORD m_dwMinWaitTime;	// 最小待機時間(ms)
 	DWORD m_nThreadNum;		// スレッド数
-	BOOL  m_bSync;
+	BOOL  m_bSync;			// スレッド起動時の同期On/Off
 	THRD* m_pThreads;		// スレッド配列
 	
 	// ユーザイベントのデフォルト実装
@@ -133,8 +133,8 @@ protected:
 			}
 		}
 		pThread = pThis->m_pThreads;
-		if (pThread && ::InterlockedDecrement(&pThis->m_nThreadNum) == 0 && !pThis->m_bSync)
-			delete[] pThread;
+		if (pThread && !pThis->m_bSync && ::InterlockedDecrement(&pThis->m_nThreadNum) == 0)
+			delete[] pThread;	// 非同期時にスレッド配列を解放
 		
 		return 0;
 	}
@@ -142,7 +142,7 @@ protected:
 	// スレッドプール終了待機
 	BOOL JoinThread(DWORD nThreadNum, BOOL bSync = FALSE)
 	{
-		// IOCPハンドルのクリア判定で再入防止(IOCPが再作成される可能性を考慮し、NULLクリアはNG)
+		// IOCPハンドルのクリア判定で再入防止
 		HANDLE hIocp = ::InterlockedExchangePointer(&m_hIocp, NULL);
 		if (!bSync && (!hIocp || nThreadNum > m_nThreadNum))
 			return FALSE;	// スレッド未作成か範囲外(同期時は再入可能)
@@ -170,8 +170,8 @@ protected:
 			if (nTplCnt > 0)	// スレッドプール(自スレッドを除く)の終了待機
 				::WaitForMultipleObjects(nTplCnt, phThreadPool, TRUE, INFINITE);
 			
-			if (bSync)
-				delete[] pThread;	// 全終了でスレッド配列を解放
+			if (bSync || !nTplCnt)
+				delete[] pThread;	// 同期時はスレッド配列を解放
 		}
 		return TRUE;
 	}
@@ -179,10 +179,12 @@ public:
 	CIocpThreadPool(DWORD nThreadNum = 0) : 
 		m_hIocp(NULL),
 		m_dwMinWaitTime(INFINITE),
-		m_nThreadNum(TRUNC_WAIT_OBJECTS(nThreadNum)),
+		m_nThreadNum(0),
 		m_bSync(FALSE),
 		m_pThreads(NULL)
 	{
+		if (m_nThreadNum > 0)
+			CreateThreadPool(m_nThreadNum);
 	}
 	~CIocpThreadPool()
 	{
@@ -270,7 +272,7 @@ public:
 		m_dwMinWaitTime = (nWaitTime <= INFINITE / 2 ? nWaitTime : INFINITE);
 		m_bSync = bSync;
 		
-		DWORD nThreadCnt, nThreadNum = m_nThreadNum - (bSync == TRUE);	// 最終スレッドは同期(終了待機)に割当
+		DWORD nThreadCnt, nThreadNum = m_nThreadNum - (bSync != 0);	// 最終スレッドは同期(終了待機)に割当
 		for (nThreadCnt = 0; 	// 各スレッドを非同期実行
 			 nThreadCnt < nThreadNum && m_pThreads[nThreadCnt].BeginThread(WaitForIocp) != -1;
 			 ++nThreadCnt);
@@ -283,7 +285,7 @@ public:
 			else
 				return TRUE;	// 非同期実行
 		}
-		JoinThread(nThreadCnt, bSync);	// 実行スレッドがあれば終了待機
+		JoinThread(nThreadCnt, TRUE);	// 実行スレッドがあれば終了待機
 		m_nThreadNum = 0;
 		
 		return nThreadNum;
