@@ -241,8 +241,6 @@ public:
 	// スレッドプールの作成
 	BOOL CreateThreadPool(DWORD nThreadNum = 0)
 	{
-		// 1以上ならスレッド数セット(最大64まで)
-		nThreadNum = (nThreadNum < MAXIMUM_WAIT_OBJECTS ? nThreadNum : MAXIMUM_WAIT_OBJECTS);
 		if (m_nThreadNum > 0 || !CreateIocp(NULL, nThreadNum))	// IOCPがなければ作成
 			return FALSE;	// スレッドプール実行中
 		
@@ -252,6 +250,8 @@ public:
 			::GetSystemInfo(&systemInfo);
 			nThreadNum = systemInfo.dwNumberOfProcessors;
 		}
+		else if (nThreadNum > MAXIMUM_WAIT_OBJECTS)	// 1以上ならスレッド数セット(最大64まで)
+			nThreadNum = MAXIMUM_WAIT_OBJECTS;
 		
 		m_pThreads = new THRD[nThreadNum];	// スレッドプール作成
 		if (!m_pThreads)
