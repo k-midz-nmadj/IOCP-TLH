@@ -146,20 +146,16 @@ protected:
 			!(hIocp = ::InterlockedExchangePointer(&m_hIocp, NULL)) && !bSync)
 			return FALSE;	// スレッド未作成か範囲外(同期時は再入可能)
 		
-		THRD* pThread = m_pThreads;
 		DWORD nTplCnt = 0;
 		LPHANDLE phThreadPool = NULL;
-		if (nThreadNum > 0 && pThread->m_hThread)	// スレッドプール実行中
+		if (nThreadNum > 0 && m_pThreads->m_hThread)	// スレッドプール実行中
 		{
 			DWORD dwCrtThreadId = ::GetCurrentThreadId();
 			
 			// 待機用スレッドハンドルの配列作成
 			phThreadPool = static_cast<LPHANDLE>(alloca(sizeof(HANDLE) * nThreadNum));
-			for (DWORD nThreadCnt = 0; nThreadCnt < nThreadNum; ++nThreadCnt)
-				if (dwCrtThreadId != pThread[nThreadCnt].m_dwThreadID)	// 自スレッドは除外
-					phThreadPool[nTplCnt++] = pThread[nThreadCnt].m_hThread;
-				else
-					break;	// スレッドプール内からの停止は待機無し
+			for (; nTplCnt < nThreadNum && dwCrtThreadId != m_pThreads[nTplCnt].m_dwThreadID; ++nTplCnt)
+				phThreadPool[nTplCnt] = m_pThreads[nTplCnt].m_hThread;	// 自スレッドは除外
 		}
 		
 		if (hIocp)
@@ -169,12 +165,12 @@ protected:
 				return TRUE;	// 同期実行時は待機無し
 		}
 		if (nThreadNum > 0)
-		{
-			if (nThreadNum == nTplCnt)	// スレッドプール(自スレッドを除く)の終了待機
+		{	// スレッドプール(自スレッドを除く)の終了待機
+			if (nThreadNum == nTplCnt)	// スレッドプール内からの停止は待機無し
 				::WaitForMultipleObjects(nTplCnt, phThreadPool, TRUE, INFINITE);
 			
 			if (bSync || !phThreadPool)
-				delete[] pThread;	// 全終了でスレッド配列を解放
+				delete[] m_pThreads;	// 全終了でスレッド配列を解放
 		}
 		return TRUE;
 	}
@@ -239,7 +235,7 @@ public:
 	}
 	
 	// スレッドプールの作成
-	BOOL CreateThreadPool(DWORD nThreadNum = 0)
+	BOOL CreateThreadPool(DWORD nThreadNum = 0, DWORD nSuspendCnt = 0)
 	{
 		if (m_nThreadNum > 0 || !CreateIocp(NULL, nThreadNum))	// IOCPがなければ作成
 			return FALSE;	// スレッドプール実行中
@@ -250,7 +246,9 @@ public:
 			::GetSystemInfo(&systemInfo);
 			nThreadNum = systemInfo.dwNumberOfProcessors;
 		}
-		else if (nThreadNum > MAXIMUM_WAIT_OBJECTS)	// 1以上ならスレッド数セット(最大64まで)
+		
+		nThreadNum *= (nSuspendCnt + 1);	// 各スレッドのサスペンド回数でスレッド数倍増
+		if (nThreadNum > MAXIMUM_WAIT_OBJECTS)	// スレッド数セット(最大64まで)
 			nThreadNum = MAXIMUM_WAIT_OBJECTS;
 		
 		m_pThreads = new THRD[nThreadNum];	// スレッドプール作成
