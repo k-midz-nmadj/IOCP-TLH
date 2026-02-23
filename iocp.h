@@ -164,12 +164,12 @@ protected:
 			if (m_bSync)
 				return TRUE;	// 同期実行時は待機無し
 		}
-		if (nThreadNum > 0)
+		if (m_nThreadNum > 0)
 		{	// スレッドプール(自スレッドを除く)の終了待機
-			if (nThreadNum == nTplCnt)	// スレッドプール内からの停止は待機無し
+			if (phThreadPool && nThreadNum == nTplCnt)	// スレッドプール内からの停止は待機無し
 				::WaitForMultipleObjects(nTplCnt, phThreadPool, TRUE, INFINITE);
 			
-			if (bSync || !phThreadPool)
+			if (!phThreadPool || bSync)
 				delete[] m_pThreads;	// 全終了でスレッド配列を解放
 		}
 		return TRUE;
