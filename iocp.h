@@ -160,8 +160,11 @@ protected:
 		
 		if (hIocp)
 		{
+			if (!m_bSync && nThreadNum == nTplCnt)
+				m_bSync = bSync = TRUE;
+			
 			::CloseHandle(hIocp);	// IOCP解放によりスレッド終了
-			if (m_bSync)
+			if (m_bSync && !bSync)
 				return TRUE;	// 同期実行時は待機無し
 		}
 		if (m_nThreadNum > 0)
