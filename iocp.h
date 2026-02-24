@@ -156,13 +156,13 @@ protected:
 			phThreadPool = static_cast<LPHANDLE>(alloca(sizeof(HANDLE) * nThreadNum));
 			for (; nTplCnt < nThreadNum && dwCrtThreadId != m_pThreads[nTplCnt].m_dwThreadID; ++nTplCnt)
 				phThreadPool[nTplCnt] = m_pThreads[nTplCnt].m_hThread;	// 自スレッドは除外
+			
+			if (!m_bSync && nThreadNum == nTplCnt)
+				m_bSync = bSync = TRUE;
 		}
 		
 		if (hIocp)
 		{
-			if (!m_bSync && nThreadNum == nTplCnt)
-				m_bSync = bSync = TRUE;
-			
 			::CloseHandle(hIocp);	// IOCP解放によりスレッド終了
 			if (m_bSync && !bSync)
 				return TRUE;	// 同期実行時は待機無し
@@ -173,7 +173,11 @@ protected:
 				::WaitForMultipleObjects(nTplCnt, phThreadPool, TRUE, INFINITE);
 			
 			if (!phThreadPool || bSync)
+			{
 				delete[] m_pThreads;	// 全終了でスレッド配列を解放
+				m_nThreadNum = 0;
+				m_bSync = FALSE;
+			}
 		}
 		return TRUE;
 	}
@@ -289,8 +293,6 @@ public:
 				return TRUE;	// 非同期実行
 		}
 		JoinThread(nThreadCnt, TRUE);	// 実行スレッドがあれば終了待機
-		m_nThreadNum = 0;
-		m_bSync = FALSE;
 		
 		return nThreadNum;
 	}
