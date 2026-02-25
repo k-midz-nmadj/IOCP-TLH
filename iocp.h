@@ -139,12 +139,19 @@ protected:
 	}
 	
 	// スレッドプール終了待機
-	BOOL JoinThread(DWORD nThreadNum, BOOL bSync = FALSE)
+	BOOL JoinThread(DWORD nThreadNum)
 	{
-		HANDLE hIocp;	// IOCPハンドルのクリア判定で再入防止
-		if (nThreadNum > m_nThreadNum || 
-			!(hIocp = ::InterlockedExchangePointer(&m_hIocp, NULL)) && !bSync)
-			return FALSE;	// スレッド未作成か範囲外(同期時は再入可能)
+		if (nThreadNum > m_nThreadNum)	// スレッド範囲外
+			return FALSE;
+		
+		HANDLE hIocp = ::InterlockedExchangePointer(&m_hIocp, NULL);
+		if (hIocp)	// IOCPハンドルのクリア判定で再入防止
+		{
+			if (m_bSync)
+				return ::CloseHandle(hIocp);
+		}
+		else if (!m_bSync || nThreadNum == m_nThreadNum)
+			return FALSE;	// スレッド未作成(同期時は再入可能)
 		
 		DWORD nTplCnt = 0;
 		LPHANDLE phThreadPool = NULL;
@@ -157,22 +164,18 @@ protected:
 			for (; nTplCnt < nThreadNum && dwCrtThreadId != m_pThreads[nTplCnt].m_dwThreadID; ++nTplCnt)
 				phThreadPool[nTplCnt] = m_pThreads[nTplCnt].m_hThread;	// 自スレッドは除外
 			
-			if (!m_bSync && nThreadNum == nTplCnt)
-				m_bSync = bSync = TRUE;
+			if (!m_bSync && nThreadNum == nTplCnt)	// 非同期でスレッドプール外から停止
+				m_bSync = TRUE;
 		}
-		
 		if (hIocp)
-		{
 			::CloseHandle(hIocp);	// IOCP解放によりスレッド終了
-			if (m_bSync && !bSync)
-				return TRUE;	// 同期実行時は待機無し
-		}
+		
 		if (m_nThreadNum > 0)
 		{	// スレッドプール(自スレッドを除く)の終了待機
-			if (phThreadPool && nThreadNum == nTplCnt)	// スレッドプール内からの停止は待機無し
+			if (m_bSync && phThreadPool)	// スレッドプール内からの停止は待機無し
 				::WaitForMultipleObjects(nTplCnt, phThreadPool, TRUE, INFINITE);
 			
-			if (!phThreadPool || bSync)
+			if (m_bSync || !phThreadPool)
 			{
 				delete[] m_pThreads;	// 全終了でスレッド配列を解放
 				m_nThreadNum = 0;
@@ -292,7 +295,7 @@ public:
 			else
 				return TRUE;	// 非同期実行
 		}
-		JoinThread(nThreadCnt, TRUE);	// 実行スレッドがあれば終了待機
+		JoinThread(nThreadCnt);	// 実行スレッドがあれば終了待機
 		
 		return nThreadNum;
 	}
