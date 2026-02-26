@@ -148,10 +148,10 @@ protected:
 		if (hIocp)	// IOCPハンドルのクリア判定で再入防止
 		{
 			if (m_bSync)
-				return ::CloseHandle(hIocp);
+				return ::CloseHandle(hIocp);	// 同期時は直にIOCP解放
 		}
 		else if (!m_bSync || nThreadNum == m_nThreadNum)
-			return FALSE;	// スレッド未作成(同期時は再入可能)
+			return FALSE;	// 同期時は再入可能
 		
 		DWORD nTplCnt = 0;
 		LPHANDLE phThreadPool = NULL;
@@ -164,7 +164,7 @@ protected:
 			for (; nTplCnt < nThreadNum && dwCrtThreadId != m_pThreads[nTplCnt].m_dwThreadID; ++nTplCnt)
 				phThreadPool[nTplCnt] = m_pThreads[nTplCnt].m_hThread;	// 自スレッドは除外
 			
-			if (!m_bSync && nThreadNum == nTplCnt)	// 非同期でスレッドプール外から停止
+			if (!m_bSync && nTplCnt == nThreadNum)	// 非同期でスレッドプール外から停止
 				m_bSync = TRUE;
 		}
 		if (hIocp)
@@ -177,7 +177,7 @@ protected:
 			
 			if (m_bSync || !phThreadPool)
 			{
-				delete[] m_pThreads;	// 全終了でスレッド配列を解放
+				delete[] m_pThreads;	// 待機終了後にスレッド配列を解放
 				m_nThreadNum = 0;
 				m_bSync = FALSE;
 			}
