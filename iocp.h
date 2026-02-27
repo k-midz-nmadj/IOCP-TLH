@@ -170,17 +170,14 @@ protected:
 		if (hIocp)
 			::CloseHandle(hIocp);	// IOCP解放によりスレッド終了
 		
-		if (m_nThreadNum > 0)
+		if (m_nThreadNum > 0 && (m_bSync || !phThreadPool))
 		{	// スレッドプール(自スレッドを除く)の終了待機
-			if (m_bSync && phThreadPool)	// スレッドプール内からの停止は待機無し
+			if (phThreadPool)	// スレッドプール内からの停止は待機無し
 				::WaitForMultipleObjects(nTplCnt, phThreadPool, TRUE, INFINITE);
 			
-			if (m_bSync || !phThreadPool)
-			{
-				delete[] m_pThreads;	// 待機終了後にスレッド配列を解放
-				m_nThreadNum = 0;
-				m_bSync = FALSE;
-			}
+			delete[] m_pThreads;	// 待機終了後にスレッド配列を解放
+			m_nThreadNum = 0;
+			m_bSync = FALSE;
 		}
 		return TRUE;
 	}
@@ -197,7 +194,7 @@ public:
 	}
 	~CIocpThreadPool()
 	{
-		Stop();	// スレッドプール終了待機
+		JoinThread(m_nThreadNum);	// スレッドプール終了待機
 	}
 	
 	BOOL IsRunning()	// スレッド実行中判定
@@ -280,7 +277,6 @@ public:
 		
 		// タイムアウト時間設定(最大タイムアウト値/2以上は無効)
 		m_dwMinWaitTime = (nWaitTime <= INFINITE / 2 ? nWaitTime : INFINITE);
-		m_bSync = bSync;
 		
 		DWORD nThreadCnt, nThreadNum = m_nThreadNum - (bSync != 0);	// 最終スレッドは同期(終了待機)に割当
 		for (nThreadCnt = 0; 	// 各スレッドを非同期実行
@@ -290,6 +286,7 @@ public:
 		nThreadNum = (nThreadCnt == nThreadNum);
 		if (nThreadNum) 	// 全スレッド起動成功
 		{
+			m_bSync = bSync;
 			if (bSync)	// 同期実行時は待機
 				nThreadNum = (m_pThreads[nThreadCnt].BeginThread(WaitForIocp, NULL, TRUE) != -1);
 			else
@@ -303,6 +300,6 @@ public:
 	// スレッドプールの実行終了
 	BOOL Stop()
 	{
-		return JoinThread(m_nThreadNum);	// スレッドプール外なら終了まで待機
+		return (IsRunning() ? JoinThread(m_nThreadNum) : FALSE);	// スレッド実行中なら終了
 	}
 };
