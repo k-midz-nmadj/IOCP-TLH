@@ -175,9 +175,9 @@ protected:
 			if (phThreadPool)	// スレッドプール内からの停止は待機無し
 				::WaitForMultipleObjects(nTplCnt, phThreadPool, TRUE, INFINITE);
 			
-			delete[] m_pThreads;	// 待機終了後にスレッド配列を解放
 			m_nThreadNum = 0;
 			m_bSync = FALSE;
+			delete[] m_pThreads;	// 待機終了後にスレッド配列を解放
 		}
 		return TRUE;
 	}
