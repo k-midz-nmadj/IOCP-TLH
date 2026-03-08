@@ -153,11 +153,10 @@ protected:
 		else if (!m_bSync || nThreadNum == m_nThreadNum)
 			return FALSE;	// 同期時は再入可能
 		
-		DWORD nTplCnt = 0;
 		LPHANDLE phThreadPool = NULL;
 		if (nThreadNum > 0 && m_pThreads->m_hThread)	// スレッドプール実行中
 		{
-			DWORD dwCrtThreadId = ::GetCurrentThreadId();
+			DWORD nTplCnt, dwCrtThreadId = ::GetCurrentThreadId();
 			
 			// 待機用スレッドハンドルの配列作成
 			phThreadPool = static_cast<LPHANDLE>(alloca(sizeof(HANDLE) * nThreadNum));
@@ -173,7 +172,7 @@ protected:
 		if (m_nThreadNum > 0 && (m_bSync || !phThreadPool))
 		{	// スレッドプール(自スレッドを除く)の終了待機
 			if (phThreadPool)	// スレッドプール内からの停止は待機無し
-				::WaitForMultipleObjects(nTplCnt, phThreadPool, TRUE, INFINITE);
+				::WaitForMultipleObjects(nThreadNum, phThreadPool, TRUE, INFINITE);
 			
 			m_nThreadNum = 0;
 			m_bSync = FALSE;
