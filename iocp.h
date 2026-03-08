@@ -160,7 +160,7 @@ protected:
 			
 			// 待機用スレッドハンドルの配列作成
 			phThreadPool = static_cast<LPHANDLE>(alloca(sizeof(HANDLE) * nThreadNum));
-			for (; nTplCnt < nThreadNum && dwCrtThreadId != m_pThreads[nTplCnt].m_dwThreadID; ++nTplCnt)
+			for (nTplCnt = 0; nTplCnt < nThreadNum && dwCrtThreadId != m_pThreads[nTplCnt].m_dwThreadID; ++nTplCnt)
 				phThreadPool[nTplCnt] = m_pThreads[nTplCnt].m_hThread;	// 自スレッドは除外
 			
 			if (!m_bSync && nTplCnt == nThreadNum)	// 非同期でスレッドプール外から停止
