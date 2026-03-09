@@ -160,7 +160,8 @@ protected:
 			
 			// 待機用スレッドハンドルの配列作成
 			phThreadPool = static_cast<LPHANDLE>(alloca(sizeof(HANDLE) * nThreadNum));
-			for (nTplCnt = 0; nTplCnt < nThreadNum && dwCrtThreadId != m_pThreads[nTplCnt].m_dwThreadID; ++nTplCnt)
+			for (nTplCnt = 0; nTplCnt < nThreadNum && 
+			                  dwCrtThreadId != m_pThreads[nTplCnt].m_dwThreadID; ++nTplCnt)
 				phThreadPool[nTplCnt] = m_pThreads[nTplCnt].m_hThread;	// 自スレッドは除外
 			
 			if (!m_bSync && nTplCnt == nThreadNum)	// 非同期でスレッドプール外から停止
@@ -285,11 +286,11 @@ public:
 		nThreadNum = (nThreadCnt == nThreadNum);
 		if (nThreadNum) 	// 全スレッド起動成功
 		{
-			m_bSync = bSync;
-			if (bSync)	// 同期実行時は待機
-				nThreadNum = (m_pThreads[nThreadCnt].BeginThread(WaitForIocp, NULL, TRUE) != -1);
-			else
+			if (!bSync)
 				return TRUE;	// 非同期実行
+			
+			m_bSync = TRUE;	// 同期実行時は待機
+			nThreadNum = (m_pThreads[nThreadCnt].BeginThread(WaitForIocp, NULL, TRUE) != -1);
 		}
 		JoinThread(nThreadCnt);	// 実行スレッドがあれば終了待機
 		
