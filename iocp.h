@@ -155,10 +155,9 @@ protected:
 		
 		LPHANDLE phThreadPool = NULL;
 		if (nThreadNum > 0 && m_pThreads->m_hThread)	// スレッドプール実行中
-		{
+		{	// 待機用スレッドハンドルの配列作成
 			DWORD nTplCnt, dwCrtThreadId = ::GetCurrentThreadId();
 			
-			// 待機用スレッドハンドルの配列作成
 			phThreadPool = static_cast<LPHANDLE>(alloca(sizeof(HANDLE) * nThreadNum));
 			for (nTplCnt = 0; nTplCnt < nThreadNum && 
 			                  dwCrtThreadId != m_pThreads[nTplCnt].m_dwThreadID; ++nTplCnt)
@@ -244,8 +243,15 @@ public:
 	// スレッドプールの作成
 	BOOL CreateThreadPool(DWORD nThreadNum = 0, DWORD nSuspendCnt = 0)
 	{
-		if (m_nThreadNum > 0 || !CreateIocp(NULL, nThreadNum))	// IOCPがなければ作成
-			return FALSE;	// スレッドプール実行中
+		if (m_nThreadNum > 0)
+		{
+			if (m_pThreads->m_hThread)
+				return FALSE;	// スレッドプール実行中
+			
+			JoinThread(m_nThreadNum);	// 再作成のため解放
+		}
+		if (!CreateIocp(NULL, nThreadNum))	// IOCPがなければ作成
+			return FALSE;
 		
 		if (nThreadNum == 0)	// スレッド数が未設定ならCPU数をセット
 		{
