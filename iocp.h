@@ -139,10 +139,10 @@ protected:
 	}
 	
 	// スレッドプール終了待機
-	BOOL JoinThread(DWORD nThreadNum)
+	BOOL JoinThread(DWORD nThreadNum = MAXIMUM_WAIT_OBJECTS + 1)
 	{
 		if (nThreadNum > m_nThreadNum)	// スレッド範囲外
-			return FALSE;
+			nThreadNum = m_nThreadNum;
 		
 		HANDLE hIocp = ::InterlockedExchangePointer(&m_hIocp, NULL);
 		if (hIocp)	// IOCPハンドルのクリア判定で再入防止
@@ -193,7 +193,7 @@ public:
 	}
 	~CIocpThreadPool()
 	{
-		JoinThread(m_nThreadNum);	// スレッドプール終了待機
+		JoinThread();	// スレッドプール終了待機
 	}
 	
 	BOOL IsRunning()	// スレッド実行中判定
@@ -248,7 +248,7 @@ public:
 			if (m_pThreads->m_hThread)
 				return FALSE;	// スレッドプール実行中
 			
-			JoinThread(m_nThreadNum);	// 再作成のため解放
+			JoinThread();	// 再作成のため解放
 		}
 		if (!CreateIocp(NULL, nThreadNum))	// IOCPがなければ作成
 			return FALSE;
@@ -306,6 +306,6 @@ public:
 	// スレッドプールの実行終了
 	BOOL Stop()
 	{
-		return (IsRunning() ? JoinThread(m_nThreadNum) : FALSE);	// スレッド実行中なら終了
+		return (IsRunning() ? JoinThread() : FALSE);	// スレッド実行中なら終了
 	}
 };
