@@ -141,16 +141,16 @@ protected:
 	// スレッドプール終了待機
 	BOOL JoinThread(DWORD nThreadNum = MAXIMUM_WAIT_OBJECTS + 1)
 	{
-		if (nThreadNum > m_nThreadNum)	// スレッド範囲外
-			nThreadNum = m_nThreadNum;
-		
 		HANDLE hIocp = ::InterlockedExchangePointer(&m_hIocp, NULL);
 		if (hIocp)	// IOCPハンドルのクリア判定で再入防止
 		{
 			if (m_bSync)
 				return ::CloseHandle(hIocp);	// 同期時は直にIOCP解放
+			
+			if (nThreadNum > m_nThreadNum)	// デフォルト引数判定
+				nThreadNum = m_nThreadNum;
 		}
-		else if (!m_bSync || nThreadNum == m_nThreadNum)
+		else if (!m_bSync || nThreadNum >= m_nThreadNum)
 			return FALSE;	// 同期時は再入可能
 		
 		LPHANDLE phThreadPool = NULL;
@@ -278,7 +278,8 @@ public:
 	// スレッドプールの実行開始(bSync: 同期/非同期)
 	BOOL Start(DWORD nWaitTime = INFINITE, BOOL bSync = TRUE)
 	{
-		if (m_nThreadNum == 0 && !CreateThreadPool() || m_pThreads->m_hThread)	// スレッドプールがなければ作成
+		// スレッドプールがなければ作成
+		if (m_nThreadNum == 0 && !CreateThreadPool() || m_pThreads->m_hThread)
 			return FALSE;	// スレッドプール実行中
 		
 		// タイムアウト時間設定(最大タイムアウト値/2以上は無効)
