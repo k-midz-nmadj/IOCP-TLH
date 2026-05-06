@@ -192,7 +192,8 @@ public:
 	ITEM* AddItem(TALC* pAlc = NULL, BOOL bToHead = FALSE)
 	{
 		ISBASE_TYPE(ITEM, TYPE);
-		struct NodeT : public Node, public ITEM {	// 追加要素の先頭にノード情報付加
+		struct NodeT : public Node, public ITEM
+		{	// 追加要素の先頭にノード情報付加
 		} *pNode = (pAlc ? pAlc->New<NodeT>() : TALC::template NewT<NodeT>());
 		
 		if (pNode)	// 生成した要素をリストへ追加
