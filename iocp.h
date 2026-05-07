@@ -6,6 +6,7 @@
 #include "thread.h"
 #include <malloc.h>
 
+#define WAIT_TERM (INFINITE - 1)
 #define DIFF_TIME(now, tm) (now >= tm ? now - (tm) : (DWORD)(0x100000000 - (tm)) + now)
 
 // IO完了イベント定義クラス(THRD: スレッド実装クラス)
@@ -121,7 +122,7 @@ protected:
 			else
 				dwError = ::GetLastError();
 			
-			switch (dwError)	// エラー判定(ERROR_ABANDONED_WAIT_0,ERROR_INVALID_HANDLE)
+			switch (dwError)
 			{
 			case WAIT_IO_COMPLETION:	// APC実行時はタイムアウト判定
 				if (DIFF_TIME(dwCurrentTime, dwLastTime) <= pThis->m_dwMinWaitTime)
@@ -129,23 +130,27 @@ protected:
 			case WAIT_TIMEOUT:	// タイムアウトイベント発行
 				pThread->OnTimeout(dwCurrentTime);
 				dwLastTime = dwCurrentTime;
+				break;
+			default:	// エラー判定(ERROR_ABANDONED_WAIT_0,ERROR_INVALID_HANDLE)
+				if (!pThis->m_bSync && ::InterlockedDecrement(&pThis->m_nThreadNum) == 0)
+				{
+					pThis->m_hIocp = NULL;
+					delete[] pThis->m_pThreads;	// 非同期時にスレッド配列を解放
+				}
+				return dwError;
 			}
 		}
-		pThread = pThis->m_pThreads;
-		if (pThread && !pThis->m_bSync && ::InterlockedDecrement(&pThis->m_nThreadNum) == 0)
-			delete[] pThread;	// 非同期時にスレッド配列を解放
-		
 		return 0;
 	}
 	
 	// スレッドプール終了待機
 	BOOL JoinThread(DWORD nThreadNum = MAXIMUM_WAIT_OBJECTS + 1)
 	{
-		HANDLE hIocp = ::InterlockedExchangePointer(&m_hIocp, NULL);
-		if (hIocp)	// IOCPハンドルのクリア判定で再入防止
+		DWORD dwWaitTime = ::InterlockedExchange(&m_dwMinWaitTime, WAIT_TERM);
+		if (dwWaitTime != WAIT_TERM)	// 再入防止
 		{
 			if (m_bSync)
-				return ::CloseHandle(hIocp);	// 同期時は直にIOCP解放
+				return ::CloseHandle(m_hIocp);	// 同期時は直にIOCP解放
 			
 			if (nThreadNum > m_nThreadNum)	// デフォルト引数判定
 				nThreadNum = m_nThreadNum;
@@ -166,8 +171,8 @@ protected:
 			if (!m_bSync && nTplCnt == nThreadNum)	// 非同期でスレッドプール外から停止
 				m_bSync = TRUE;
 		}
-		if (hIocp)
-			::CloseHandle(hIocp);	// IOCP解放によりスレッド終了
+		if (dwWaitTime != WAIT_TERM)
+			::CloseHandle(m_hIocp);	// IOCP解放によりスレッド終了
 		
 		if (m_nThreadNum > 0 && (m_bSync || !phThreadPool))
 		{	// スレッドプール(自スレッドを除く)の終了待機
@@ -176,6 +181,7 @@ protected:
 			
 			m_nThreadNum = 0;
 			m_bSync = FALSE;
+			m_hIocp = NULL;
 			delete[] m_pThreads;	// 待機終了後にスレッド配列を解放
 		}
 		return TRUE;
@@ -183,7 +189,7 @@ protected:
 public:
 	CIocpThreadPool(DWORD nThreadNum = 0) : 
 		m_hIocp(NULL),
-		m_dwMinWaitTime(INFINITE),
+		m_dwMinWaitTime(WAIT_TERM),
 		m_nThreadNum(0),
 		m_bSync(FALSE),
 		m_pThreads(NULL)
@@ -243,15 +249,9 @@ public:
 	// スレッドプールの作成
 	BOOL CreateThreadPool(DWORD nThreadNum = 0, DWORD nSuspendCnt = 0)
 	{
-		if (m_nThreadNum > 0)
-		{
-			if (m_pThreads->m_hThread)
-				return FALSE;	// スレッドプール実行中
-			
-			JoinThread();	// 再作成のため解放
-		}
-		if (!CreateIocp(NULL, nThreadNum))	// IOCPがなければ作成
-			return FALSE;
+		if (m_nThreadNum > 0 && (m_pThreads->m_hThread || !JoinThread()) ||	// 再作成のため解放
+			!CreateIocp(NULL, nThreadNum))	// IOCPがなければ作成
+			return FALSE;	// スレッドプール実行中
 		
 		if (nThreadNum == 0)	// スレッド数が未設定ならCPU数をセット
 		{
