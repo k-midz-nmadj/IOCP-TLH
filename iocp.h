@@ -6,7 +6,6 @@
 #include "thread.h"
 #include <malloc.h>
 
-#define WAIT_TERM (INFINITE - 1)
 #define DIFF_TIME(now, tm) (now >= tm ? now - (tm) : (DWORD)(0x100000000 - (tm)) + now)
 
 // IO完了イベント定義クラス(THRD: スレッド実装クラス)
@@ -73,7 +72,7 @@ protected:
 	HANDLE m_hIocp;			// IOCPハンドル
 	DWORD m_dwMinWaitTime;	// 最小待機時間(ms)
 	DWORD m_nThreadNum;		// スレッド数
-	BOOL  m_bSync;			// スレッド起動時の待機(On/Off)
+	DWORD  m_nSync;			// スレッド起動時の待機(0/1/2/3)
 	THRD* m_pThreads;		// スレッド配列
 	
 	// ユーザイベントのデフォルト実装
@@ -122,7 +121,7 @@ protected:
 			else
 				dwError = ::GetLastError();
 			
-			switch (dwError)
+			switch (dwError)	// エラー判定(ERROR_ABANDONED_WAIT_0,ERROR_INVALID_HANDLE)
 			{
 			case WAIT_IO_COMPLETION:	// APC実行時はタイムアウト判定
 				if (DIFF_TIME(dwCurrentTime, dwLastTime) <= pThis->m_dwMinWaitTime)
@@ -130,32 +129,28 @@ protected:
 			case WAIT_TIMEOUT:	// タイムアウトイベント発行
 				pThread->OnTimeout(dwCurrentTime);
 				dwLastTime = dwCurrentTime;
-				break;
-			default:	// エラー判定(ERROR_ABANDONED_WAIT_0,ERROR_INVALID_HANDLE)
-				if (!pThis->m_bSync && ::InterlockedDecrement(&pThis->m_nThreadNum) == 0)
-				{
-					pThis->m_hIocp = NULL;
-					delete[] pThis->m_pThreads;	// 非同期時にスレッド配列を解放
-				}
-				return dwError;
 			}
 		}
+		pThread = pThis->m_pThreads;
+		if (pThread && pThis->m_nSync == 1 && ::InterlockedDecrement(&pThis->m_nThreadNum) == 0)
+			delete[] pThread;	// 非同期時にスレッド配列を解放
+		
 		return 0;
 	}
 	
 	// スレッドプール終了待機
 	BOOL JoinThread(DWORD nThreadNum = MAXIMUM_WAIT_OBJECTS + 1)
 	{
-		DWORD dwWaitTime = ::InterlockedExchange(&m_dwMinWaitTime, WAIT_TERM);
-		if (dwWaitTime != WAIT_TERM)	// 再入防止
+		HANDLE hIocp = ::InterlockedExchangePointer(&m_hIocp, NULL);
+		if (hIocp)	// IOCPハンドルのクリア判定で再入防止
 		{
-			if (m_bSync)
-				return ::CloseHandle(m_hIocp);	// 同期時は直にIOCP解放
+			if (m_nSync >= 2)
+				return ::CloseHandle(hIocp);	// 同期時は直にIOCP解放
 			
 			if (nThreadNum > m_nThreadNum)	// デフォルト引数判定
 				nThreadNum = m_nThreadNum;
 		}
-		else if (!m_bSync || nThreadNum >= m_nThreadNum)
+		else if (m_nSync < 2 || nThreadNum >= m_nThreadNum)
 			return FALSE;	// 同期時は再入可能
 		
 		LPHANDLE phThreadPool = NULL;
@@ -168,20 +163,19 @@ protected:
 			                  dwCrtThreadId != m_pThreads[nTplCnt].m_dwThreadID; ++nTplCnt)
 				phThreadPool[nTplCnt] = m_pThreads[nTplCnt].m_hThread;	// 自スレッドは除外
 			
-			if (!m_bSync && nTplCnt == nThreadNum)	// 非同期でスレッドプール外から停止
-				m_bSync = TRUE;
+			if (nTplCnt < nThreadNum)	// 非同期でスレッドプール外から停止
+				++m_nSync;
 		}
-		if (dwWaitTime != WAIT_TERM)
-			::CloseHandle(m_hIocp);	// IOCP解放によりスレッド終了
+		if (hIocp)
+			::CloseHandle(hIocp);	// IOCP解放によりスレッド終了
 		
-		if (m_nThreadNum > 0 && (m_bSync || !phThreadPool))
+		if (m_nThreadNum > 0 && m_nSync != 1)
 		{	// スレッドプール(自スレッドを除く)の終了待機
 			if (phThreadPool)	// スレッドプール内からの停止は待機無し
 				::WaitForMultipleObjects(nThreadNum, phThreadPool, TRUE, INFINITE);
 			
 			m_nThreadNum = 0;
-			m_bSync = FALSE;
-			m_hIocp = NULL;
+			m_nSync = 0;
 			delete[] m_pThreads;	// 待機終了後にスレッド配列を解放
 		}
 		return TRUE;
@@ -189,9 +183,9 @@ protected:
 public:
 	CIocpThreadPool(DWORD nThreadNum = 0) : 
 		m_hIocp(NULL),
-		m_dwMinWaitTime(WAIT_TERM),
+		m_dwMinWaitTime(INFINITE),
 		m_nThreadNum(0),
-		m_bSync(FALSE),
+		m_nSync(0),
 		m_pThreads(NULL)
 	{
 		if (nThreadNum > 0)
@@ -249,9 +243,15 @@ public:
 	// スレッドプールの作成
 	BOOL CreateThreadPool(DWORD nThreadNum = 0, DWORD nSuspendCnt = 0)
 	{
-		if (m_nThreadNum > 0 && (m_pThreads->m_hThread || !JoinThread()) ||	// 再作成のため解放
-			!CreateIocp(NULL, nThreadNum))	// IOCPがなければ作成
-			return FALSE;	// スレッドプール実行中
+		if (m_nThreadNum > 0)
+		{
+			if (m_pThreads->m_hThread)
+				return FALSE;	// スレッドプール実行中
+			
+			JoinThread();	// 再作成のため解放
+		}
+		if (!CreateIocp(NULL, nThreadNum))	// IOCPがなければ作成
+			return FALSE;
 		
 		if (nThreadNum == 0)	// スレッド数が未設定ならCPU数をセット
 		{
@@ -296,7 +296,7 @@ public:
 			if (!bSync)
 				return TRUE;	// 非同期実行
 			
-			m_bSync = TRUE;	// 同期実行時は待機
+			m_nSync = 2;	// 同期実行時は待機
 			nThreadNum = (m_pThreads[nThreadCnt].BeginThread(WaitForIocp, NULL, TRUE) != -1);
 		}
 		JoinThread(nThreadCnt);	// 実行スレッドがあれば終了待機
