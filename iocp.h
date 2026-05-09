@@ -158,7 +158,6 @@ protected:
 		else if (m_nState != 1 || nThreadNum >= m_nThreadNum)
 			return FALSE;	// 同期時は再入可能
 		
-		// スレッドプール(自スレッドを除く)の終了待機
 		if (nThreadNum > 0 && m_pThreads->m_hThread)	// スレッドプール実行中
 		{	// 待機用スレッドハンドルの配列作成
 			DWORD nTplCnt, dwCrtThreadId = ::GetCurrentThreadId();
@@ -168,12 +167,12 @@ protected:
 			                  dwCrtThreadId != m_pThreads[nTplCnt].m_dwThreadID; ++nTplCnt)
 				phThreadPool[nTplCnt] = m_pThreads[nTplCnt].m_hThread;	// 自スレッドは除外
 			
-			if (nTplCnt < nThreadNum)	// スレッドプール内から停止
+			if (nTplCnt < nThreadNum)
 			{
 				m_nState = 2;
-				return TRUE;
+				return TRUE;	// スレッドプール内からの停止は待機無し
 			}
-			// スレッドプール内からの停止は待機無し
+			// スレッドプール(自スレッドを除く)の終了待機
 			::WaitForMultipleObjects(nTplCnt, phThreadPool, TRUE, INFINITE);
 		}
 		
