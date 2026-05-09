@@ -86,7 +86,7 @@ protected:
 		THRD* pThread = static_cast<THRD*>(pParam);	// IOCPスレッド
 		CIocpThreadPool* pThis = pThread->m_pIocp;	// スレッドプール
 		DWORD dwCurrentTime, dwLastTime = ::GetTickCount();	// 最終更新時間
-		DWORD dwError = -1;
+		DWORD dwError = 0;
 		
 		while (pThis->m_hIocp)	// IOCPハンドル有効時
 		{
@@ -288,14 +288,13 @@ public:
 			 nThreadCnt < nThreadNum && m_pThreads[nThreadCnt].BeginThread(WaitForIocp) != -1;
 			 ++nThreadCnt);
 		
+		m_nThreadNum = nThreadCnt + m_nState;	// 実際のスレッド起動数
 		if (bSync)	// 同期実行
-			nThreadNum = (m_pThreads[nThreadCnt].BeginThread(WaitForIocp, NULL, TRUE) != -1);
-		else if (nThreadCnt > 0)
-		{
-			m_nThreadNum = nThreadCnt;	// 実際のスレッド起動数
-			return TRUE;	// 非同期実行
-		}
-		return (JoinThread(nThreadCnt) && nThreadNum);	// 実行スレッドがあれば終了待機
+			m_nState = (m_pThreads[nThreadCnt].BeginThread(WaitForIocp, NULL, TRUE) != -1);
+		else if (nThreadCnt > 0)	// 非同期実行
+			return TRUE;
+		
+		return (JoinThread(nThreadCnt) && m_nState);	// 実行スレッドがあれば終了待機
 	}
 	
 	// スレッドプールの実行終了
