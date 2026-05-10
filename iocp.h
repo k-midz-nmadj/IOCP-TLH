@@ -71,8 +71,8 @@ protected:
 	
 	HANDLE m_hIocp;			// IOCPハンドル
 	DWORD m_dwMinWaitTime;	// 最小待機時間(ms)
-	DWORD m_nState;			// スレッド起動状態(0:非同期,1:同期,2:スレッドプール内で停止)
-	DWORD m_nThreadNum;		// スレッド数
+	LONG  m_nState;			// スレッド起動状態(0:非同期,1:同期,2:スレッドプール内で停止)
+	LONG  m_nThreadNum;		// スレッド数
 	THRD* m_pThreads;		// スレッド配列
 	
 	// ユーザイベントのデフォルト実装
@@ -142,25 +142,25 @@ protected:
 		return dwError;
 	}
 	
-	// スレッドプール終了待機
-	BOOL JoinThread(DWORD nThreadNum = MAXIMUM_WAIT_OBJECTS + 1)
+	// スレッドプール終了待機(bSync: 同期/非同期)
+	BOOL JoinThread(BOOL bSync = FALSE)
 	{
-		if (nThreadNum > m_nThreadNum)	// デフォルト引数判定
-			nThreadNum = m_nThreadNum;
-		
+		LONG nThreadNum = m_nThreadNum - (bSync != FALSE);	// 同期用スレッドは除外
 		HANDLE hIocp = ::InterlockedExchangePointer(&m_hIocp, NULL);
-		if (hIocp)	// IOCPハンドルのクリア判定で再入防止
+		
+		if (hIocp)	// IOCPハンドルのクリア判定で再入防止(実行中スレッドから終了)
 		{
-			::CloseHandle(hIocp);	// IOCP解放によりスレッド終了
+			::CloseHandle(hIocp);	// IOCPによる待機中スレッドを解放
 			if (!m_pThreads || m_nState == 1)
 				return TRUE;	// 同期時は待機無し
 		}
-		else if (m_nState != 1 || nThreadNum >= m_nThreadNum)
-			return FALSE;	// 同期時は再入可能
+		else if (!bSync || m_nState != 1)	// 同期時は再入可能
+			return FALSE;
 		
 		if (nThreadNum > 0 && m_pThreads->m_hThread)	// スレッドプール実行中
 		{	// 待機用スレッドハンドルの配列作成
-			DWORD nTplCnt, dwCrtThreadId = ::GetCurrentThreadId();
+			LONG nTplCnt;
+			DWORD dwCrtThreadId = ::GetCurrentThreadId();
 			LPHANDLE phThreadPool = static_cast<LPHANDLE>(alloca(sizeof(HANDLE) * nThreadNum));
 			
 			for (nTplCnt = 0; nTplCnt < nThreadNum && 
@@ -203,11 +203,11 @@ public:
 		return (m_pThreads && m_pThreads->m_hThread);
 	}
 	
-	DWORD GetThreadCount()	// 実行スレッド数取得
+	LONG GetThreadCount()	// 実行スレッド数取得
 	{
 		return m_nThreadNum;
 	}
-	THRD* GetThread(DWORD nThreadNum = 0)	// 実行スレッド取得
+	THRD* GetThread(LONG nThreadNum = 0)	// 実行スレッド取得
 	{
 		return ((m_pThreads || CreateThreadPool()) && nThreadNum < m_nThreadNum ? 
 				&m_pThreads[nThreadNum] : NULL);
@@ -272,7 +272,7 @@ public:
 	}
 	
 	// スレッドプールの実行開始(bSync: 同期/非同期)
-	BOOL Start(BOOL bSync = TRUE, DWORD nWaitTime = INFINITE)
+	BOOL Start(DWORD nWaitTime = INFINITE, BOOL bSync = TRUE)
 	{
 		// スレッドプールがなければ作成
 		if (!m_pThreads && !CreateThreadPool() || m_pThreads->m_hThread)
@@ -280,20 +280,20 @@ public:
 		
 		// タイムアウト時間設定(最大タイムアウト値/2以上は無効)
 		m_dwMinWaitTime = (nWaitTime <= INFINITE / 2 ? nWaitTime : INFINITE);
-		m_nState = (bSync != 0);
+		m_nState = (bSync != FALSE);
 		
-		DWORD nThreadCnt, nThreadNum = m_nThreadNum - m_nState;	// 最終スレッドは同期(終了待機)に割当
+		LONG nThreadCnt, nThreadNum = m_nThreadNum - m_nState;	// 最終スレッドは同期(終了待機)に割当
 		for (nThreadCnt = 0; 	// 各スレッドを非同期実行
 			 nThreadCnt < nThreadNum && m_pThreads[nThreadCnt].BeginThread(WaitForIocp) != -1;
 			 ++nThreadCnt);
 		
-		m_nThreadNum = nThreadCnt + m_nState;	// 実際のスレッド起動数
+		m_nThreadNum = nThreadCnt + m_nState;	// 実際のスレッド数に更新
 		if (bSync)	// 同期実行
 			m_nState = (m_pThreads[nThreadCnt].BeginThread(WaitForIocp, NULL, TRUE) != -1);
 		else if (nThreadCnt > 0)	// 非同期実行
 			return TRUE;
 		
-		return (JoinThread(nThreadCnt) && m_nState);	// 実行スレッドがあれば終了待機
+		return (JoinThread(bSync) && m_nState);	// 実行スレッドがあれば終了待機
 	}
 	
 	// スレッドプールの実行終了
