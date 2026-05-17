@@ -80,9 +80,9 @@ public:
 	}
 	
 	// APCによる関数の非同期実行
-	BOOL QueueAPC(PAPCFUNC pfnAPC, LPVOID pParam)
+	BOOL QueueAPC(PAPCFUNC pfnAPC, LPVOID pParam, BOOL bForce = FALSE)
 	{
-		if (m_hThread && ::GetCurrentThreadId() != m_dwThreadID)
+		if (m_hThread && (bForce || ::GetCurrentThreadId() != m_dwThreadID))
 			return (::QueueUserAPC(pfnAPC, m_hThread, reinterpret_cast<ULONG_PTR>(pParam)) != 0);
 		
 		pfnAPC(reinterpret_cast<ULONG_PTR>(pParam));	// 同一スレッドでの実行時は直接呼出し

@@ -98,7 +98,7 @@ public:
 				pSocket->m_pThread = this;
 			else
 			{
-				m_listSocket.DeleteItem(pSocket);	// 失敗時はリストから削除
+				CSocketList::Delete(pSocket, this);	// 失敗時はリストから削除
 				pSocket = NULL;
 			}
 		}
@@ -129,7 +129,7 @@ public:
 					if (m_pAccept->IsValid() && (m_pAccept->IsPending() || m_pAccept->Start()))
 						return TRUE;
 				}
-				CSocketList::Delete(m_pAccept);
+				CSocketList::Delete(m_pAccept, m_pThread);
 				
 				return TRUE;	// (戻り値=FALSEで自サーバソケットを削除)
 			}
@@ -147,7 +147,7 @@ public:
 						return TRUE;
 					
 					m_ioState = IOInit;	// エラー時はイベント状態初期化
-					CSocketList::Delete(m_pAccept);
+					CSocketList::Delete(m_pAccept, m_pThread);
 				}
 				return FALSE;
 			}
@@ -156,7 +156,7 @@ public:
 		// ソケット作成に成功したら接続の受け入れ開始
 		if (pListener && (!pListener->Listen(nConnections) || !pListener->Start()))
 		{
-			DeleteSocket(pListener, FALSE);	// 失敗時は削除
+			CSocketList::Delete(pListener, this);	// 失敗時は削除
 			pListener = NULL;
 		}
 		return pListener;
@@ -171,7 +171,7 @@ public:
 		// ソケット作成に成功したら接続開始
 		if (pConnect && !pConnect->Connect(CSockAddrIn(nPort, pAddr), sizeof(CSockAddrIn)))
 		{
-			DeleteSocket(pConnect, FALSE);	// 失敗時は削除
+			CSocketList::Delete(pConnect, this);	// 失敗時は削除
 			pConnect = NULL;
 		}
 		return pConnect;
@@ -206,7 +206,7 @@ public:
 			 GetAddrInfoEx(pName, pServiceName, NS_DNS, NULL, NULL, &pConnect->pResult,
 						NULL, &pConnect->m_ovl, pConnect->QueryComplete, &hCancel) != WSA_IO_PENDING)
 		{
-			DeleteSocket(pConnect, FALSE);	// 失敗時は削除
+			CSocketList::Delete(pConnect, this);	// 失敗時は削除
 			pConnect = NULL;
 		}
 		return pConnect;

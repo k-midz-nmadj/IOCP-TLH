@@ -213,7 +213,7 @@ VOID CSocketFactory::OnCancelIO(CSocketOverlapped* pIO)
 	
 	pSocket->Close();	// ソケット解放
 	if (iState >= 0)
-		m_listSocket.DeleteItem(pSocket);	// 停止中なら削除
+		CSocketList::Delete(pSocket, this);	// 停止中なら削除
 }
 
 // タイムアウトイベント
@@ -229,7 +229,7 @@ VOID CSocketFactory::OnTimeout(DWORD dwCurrentTime)
 	{
 		if (DIFF_TIME(dwCurrentTime, pSocket->m_dwLastTime) > m_pIocp->m_dwMinWaitTime && 
 			!pSocket->OnTimeout())	// 各ソケットのタイムアウトイベント発行
-			m_listSocket.DeleteItem(pSocket);	// 戻り値=FALSE:ソケット削除
+			CSocketList::Delete(pSocket, this);	// 戻り値=FALSE:ソケット削除
 	}
 }
 
@@ -245,9 +245,9 @@ BOOL CSocketFactory::FindSocket(CIocpSocket* pFind)
 }
 
 // ソケット削除
-BOOL CSocketFactory::DeleteSocket(CIocpSocket* pSocket, BOOL bFind)
+BOOL CSocketFactory::DeleteSocket(CIocpSocket* pSocket)
 {
-	return m_listSocket.DeleteItem(pSocket, bFind);	// ソケット検出有効
+	return m_listSocket.DeleteItem(pSocket, this);	// ソケット検出有効
 }
 
 

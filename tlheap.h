@@ -72,6 +72,20 @@ public:
 		return (pMem ? new(pMem) TYPE : NULL);
 	}
 	
+	template <class TYPE = VOID>	// TYPE: 解放クラス
+	BOOL Free(TYPE* pMem)
+	{
+		if (!pMem)
+			return FALSE;
+		
+		CTLHeap** pHead = reinterpret_cast<CTLHeap**>(pMem) - 1;	// TLHからスレッド参照
+		if (*pHead != this)
+			return (*pHead)->QueueAPC(FreeAPC<TYPE>, pMem, TRUE);	// APCによる解放要求(強制)
+		
+		FreeAPC<TYPE>(reinterpret_cast<ULONG_PTR>(pMem));	// static版で確保したメモリは同期解放
+		return TRUE;
+	}
+	
 	// プロセスヒープからのメモリ確保(static版)
 	static LPVOID AllocT(SIZE_T dwSize)	// サイズ指定
 	{
@@ -94,7 +108,7 @@ public:
 	
 	// ローカルヒープからの非同期メモリ解放
 	template <class TYPE = VOID>	// TYPE: 解放クラス
-	static BOOL Free(TYPE* pMem)
+	static BOOL FreeT(TYPE* pMem)
 	{
 		if (!pMem)
 			return FALSE;
@@ -128,7 +142,7 @@ public:
 				
 				(*pThis)(pThis->m_pTlh);	// 関数オブジェクト呼出し
 				
-				CTLHeap::Free<VOID>(pThis);	// 送信元スレッドへの解放要求
+				CTLHeap::FreeT<VOID>(pThis);	// 送信元スレッドへの解放要求
 			}
 		} *pParam = Alloc<CApcParam>();	// メッセージ作成
 		
@@ -202,25 +216,28 @@ public:
 		return pNode;	// 追加要素返却
 	}
 	
-	// 指定要素の削除(bFind: 指定要素の検索有無)
-	BOOL DeleteItem(TYPE* pItem, BOOL bFind = FALSE)
+	// 指定要素の削除
+	BOOL DeleteItem(TYPE* pItem, TALC* pAlc = NULL)
 	{
 		if (!pItem)
 			return FALSE;
 		
 		Node *pNode = reinterpret_cast<Node*>(pItem) - 1, *pFind;
-		if (bFind)
-		{
-			for (pFind = m_Ring.pNext; pFind != &m_Ring && pFind != pNode; pFind = pFind->pNext);
-			
-			if (pFind == &m_Ring)
-				return FALSE;	// 指定要素が検出不可ならエラー返却
-		}
-		return TALC::Free(pNode);
+		for (pFind = m_Ring.pNext; pFind != &m_Ring && pFind != pNode; pFind = pFind->pNext);
+		
+		if (pFind == &m_Ring)
+			return FALSE;	// 指定要素が検出不可ならエラー返却
+		
+		return (pAlc ? pAlc->Free(pNode) : TALC::FreeT(pNode));
 	}
-	static BOOL Delete(TYPE* pItem)	// static版(検索不要時)
+	static BOOL Delete(TYPE* pItem, TALC* pAlc = NULL)	// static版(検索不要時)
 	{
-		return (pItem ? TALC::Free(reinterpret_cast<Node*>(pItem) - 1) : FALSE);
+		if (!pItem)
+			return FALSE;
+		
+		Node *pNode = reinterpret_cast<Node*>(pItem) - 1;
+		
+		return (pAlc ? pAlc->Free(pNode) : TALC::FreeT(pNode));
 	}
 	
 	void RemoveAll()	// 全要素の削除
@@ -230,7 +247,7 @@ public:
 		{
 			Node* pDel = pNode;
 			pNode = pNode->pNext;
-			TALC::Free(pDel);
+			TALC::FreeT(pDel);
 		}
 	}
 	int GetCount()	// 全要素数取得(Node削除時に生成元Listのカウンタ参照不可)
