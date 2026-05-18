@@ -224,12 +224,7 @@ public:
 	}
 	static BOOL Delete(TYPE* pItem, TALC* pAlc = NULL)	// static版(検索不要時)
 	{
-		if (!pItem)
-			return FALSE;
-		
-		Node *pNode = reinterpret_cast<Node*>(pItem) - 1;
-		
-		return TALC::FreeT(pNode, pAlc);
+		return (pItem ? TALC::FreeT(reinterpret_cast<Node*>(pItem) - 1, pAlc) : FALSE);
 	}
 	
 	void RemoveAll()	// 全要素の削除
