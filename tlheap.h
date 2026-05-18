@@ -75,15 +75,7 @@ public:
 	template <class TYPE = VOID>	// TYPE: 解放クラス
 	BOOL Free(TYPE* pMem)
 	{
-		if (!pMem)
-			return FALSE;
-		
-		CTLHeap** pHead = reinterpret_cast<CTLHeap**>(pMem) - 1;	// TLHからスレッド参照
-		if (*pHead != this)
-			return (*pHead)->QueueAPC(FreeAPC<TYPE>, pMem, TRUE);	// APCによる解放要求(強制)
-		
-		FreeAPC<TYPE>(reinterpret_cast<ULONG_PTR>(pMem));	// static版で確保したメモリは同期解放
-		return TRUE;
+		return FreeT<TYPE>(pMem, this);
 	}
 	
 	// プロセスヒープからのメモリ確保(static版)
@@ -108,14 +100,14 @@ public:
 	
 	// ローカルヒープからの非同期メモリ解放
 	template <class TYPE = VOID>	// TYPE: 解放クラス
-	static BOOL FreeT(TYPE* pMem)
+	static BOOL FreeT(TYPE* pMem, CTLHeap* pTlh = NULL)
 	{
 		if (!pMem)
 			return FALSE;
 		
 		CTLHeap** pHead = reinterpret_cast<CTLHeap**>(pMem) - 1;	// TLHからスレッド参照
-		if (*pHead)
-			return (*pHead)->QueueAPC(FreeAPC<TYPE>, pMem);	// メモリ確保元スレッドへのAPCによる解放要求
+		if (*pHead != pTlh)	// メモリ確保元スレッドへのAPCによる解放要求
+			return (*pHead)->QueueAPC(FreeAPC<TYPE>, pMem, pTlh != NULL);
 		
 		FreeAPC<TYPE>(reinterpret_cast<ULONG_PTR>(pMem));	// static版で確保したメモリは同期解放
 		return TRUE;
@@ -228,7 +220,7 @@ public:
 		if (pFind == &m_Ring)
 			return FALSE;	// 指定要素が検出不可ならエラー返却
 		
-		return (pAlc ? pAlc->Free(pNode) : TALC::FreeT(pNode));
+		return TALC::FreeT(pNode, pAlc);
 	}
 	static BOOL Delete(TYPE* pItem, TALC* pAlc = NULL)	// static版(検索不要時)
 	{
@@ -237,7 +229,7 @@ public:
 		
 		Node *pNode = reinterpret_cast<Node*>(pItem) - 1;
 		
-		return (pAlc ? pAlc->Free(pNode) : TALC::FreeT(pNode));
+		return TALC::FreeT(pNode, pAlc);
 	}
 	
 	void RemoveAll()	// 全要素の削除

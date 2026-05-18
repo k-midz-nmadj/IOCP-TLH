@@ -82,7 +82,7 @@ protected:
 	
 public:
 	BOOL FindSocket(CIocpSocket* pSocket);	// ソケット検索
-	BOOL DeleteSocket(CIocpSocket* pSocket, BOOL bFind = TRUE);// ソケット削除
+	BOOL DeleteSocket(CIocpSocket* pSocket);// ソケット削除
 	
 	// ソケット作成(内部コンテナへの追加)
 	template <class TYPE>	// TYPE: CIocpSocket派生クラス
