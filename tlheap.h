@@ -105,9 +105,9 @@ public:
 		if (!pMem)
 			return FALSE;
 		
-		CTLHeap** pHead = reinterpret_cast<CTLHeap**>(pMem) - 1;	// TLHからスレッド参照
-		if (*pHead != pTlh)	// メモリ確保元スレッドへのAPCによる解放要求
-			return (*pHead)->QueueAPC(FreeAPC<TYPE>, pMem, pTlh != NULL);
+		CTLHeap* pHead = *(reinterpret_cast<CTLHeap**>(pMem) - 1);	// TLHからスレッド参照
+		if (pHead && pHead != pTlh)	// メモリ確保元スレッドへのAPCによる解放要求
+			return pHead->QueueAPC(FreeAPC<TYPE>, pMem, pTlh != NULL);
 		
 		FreeAPC<TYPE>(reinterpret_cast<ULONG_PTR>(pMem));	// static版で確保したメモリは同期解放
 		return TRUE;
