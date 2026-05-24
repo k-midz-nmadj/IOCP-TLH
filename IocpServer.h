@@ -295,7 +295,7 @@ public:
 				
 				if (pConnect && !pConnect->Connect(m_pResult->ai_addr, (int)m_pResult->ai_addrlen))
 				{
-					CSocketList::Delete(pConnect);	// ¸”s‚Ííœ
+					CSocketList::Delete(pConnect, pFactory);	// ¸”s‚Ííœ
 					pConnect = NULL:
 				}
 				FreeAddrInfoEx(m_pResult);	// æ“¾‚µ‚½ƒAƒhƒŒƒXî•ñ(ADDRINFOEX)‚ğ‰ğ•ú
