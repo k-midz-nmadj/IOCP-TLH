@@ -164,17 +164,22 @@ public:
 	
 	// クライアントソケット追加
 	template <class TYPE>	// TYPE: CIocpSocket派生クラス
-	TYPE* AddConnection(LPCTSTR pAddr, USHORT nPort)
+	TYPE* AddConnection(CSockAddrIn& addr)
 	{
 		TYPE* pConnect = CreateSocket<TYPE>(&CSockAddrIn());	// クライアントソケット作成
 		
 		// ソケット作成に成功したら接続開始
-		if (pConnect && !pConnect->Connect(CSockAddrIn(nPort, pAddr), sizeof(CSockAddrIn)))
+		if (pConnect && !pConnect->Connect(addr, sizeof(addr)))
 		{
 			CSocketList::Delete(pConnect, this);	// 失敗時は削除
 			pConnect = NULL;
 		}
 		return pConnect;
+	}
+	template <class TYPE>	// TYPE: CIocpSocket派生クラス
+	TYPE* AddConnection(LPCTSTR pAddr, USHORT nPort)
+	{
+		return AddConnection<TYPE>(CSockAddrIn(nPort, pAddr));
 	}
 	
 	// クライアントソケット追加(pName:ドメイン名、pServiceName:サービス名)
@@ -221,16 +226,6 @@ protected:
 	{
 		virtual CIocpSocket* Create(CSocketFactory* pFactory) = 0;
 	};
-	template <class PRM1, class PRM2>	// パラメータ格納用テンプレート
-	struct CSocketCreatorT : public CSocketCreator
-	{
-		CSocketCreatorT(const PRM1& param1, const PRM2& param2) : m_param1(param1), m_param2(param2)
-		{
-		}
-	protected:
-		PRM1 m_param1;	// 第1パラメータ
-		PRM2 m_param2;	// 第2パラメータ
-	};
 	
 	BOOL PostCreator(CSocketCreator* pCreator);	// ソケット作成イベント発行
 	VOID OnPostEvent(LPOVERLAPPED_ENTRY lpCPEntry);	// PostEventによるユーザイベント
@@ -241,14 +236,17 @@ public:
 	template <class TYPE>	// TYPE: CIocpSocket派生クラス
 	BOOL AddListener(USHORT nPort, int nConnections = SOMAXCONN)
 	{
-		struct CSocketCreatorListen : public CSocketCreatorT<USHORT, int>
+		struct CSocketCreatorListen : public CSocketCreator
 		{
-			CSocketCreatorListen(USHORT nPort, int nConnections) : CSocketCreatorT(nPort, nConnections)
+			USHORT m_nPort;
+			int m_nConnections;
+			
+			CSocketCreatorListen(USHORT nPort, int nConnections) : m_nPort(nPort), m_nConnections(nConnections)
 			{
 			}
 			CIocpSocket* Create(CSocketFactory* pFactory)	// (スレッドプール内から呼出)
 			{
-				return pFactory->AddListener<TYPE>(m_param1, m_param2);
+				return pFactory->AddListener<TYPE>(m_nPort, m_nConnections);
 			}
 		private:
 			~CSocketCreatorListen();	// new以外の生成を禁止
@@ -257,21 +255,71 @@ public:
 	}
 	
 	// クライアントソケット作成(スレッドプール外から実行)
-	template <class TYPE, class HOST, class PORT>	// TYPE: CIocpSocket派生クラス
-	BOOL AddConnection(HOST host, PORT port)	// host: ホスト名, port: ポート番号(プロトコル名)
+	template <class TYPE>	// TYPE: CIocpSocket派生クラス
+	BOOL AddConnection(LPCTSTR pAddr, USHORT nPort)	// host: ホスト名, port: ポート番号(プロトコル名)
 	{
-		struct CSocketCreatorConnect : public CSocketCreatorT<HOST, PORT>
+		struct CSocketCreatorConnect : public CSocketCreator
 		{
-			CSocketCreatorConnect(const HOST& host, const PORT& port) : CSocketCreatorT(host, port)
+			CSockAddrIn m_addr;
+			
+			CSocketCreatorConnect(const CSockAddrIn& addr) : m_addr(addr)
 			{
 			}
 			CIocpSocket* Create(CSocketFactory* pFactory)	// (スレッドプール内から呼出)
 			{
-				return pFactory->AddConnection<TYPE>(m_param1, m_param2);
+				return pFactory->AddConnection<TYPE>(m_addr);
 			}
 		private:
 			~CSocketCreatorConnect();	// new以外の生成を禁止
 		};
-		return PostCreator(new CSocketCreatorConnect(host, port));	// Connectイベント発行
+		return PostCreator(new CSocketCreatorConnect(CSockAddrIn(nPort, pAddr)));	// Connectイベント発行
+	}
+	
+	// クライアントソケット追加(pName:ドメイン名、pServiceName:サービス名)
+	template <class TYPE>	// TYPE: CIocpSocket派生クラス
+	BOOL AddConnection(LPCTSTR pName, LPCTSTR pServiceName)
+	{
+		struct CSocketCreatorConnect : public CSocketCreator
+		{
+			OVERLAPPED m_ovl;
+			PADDRINFOEX m_pResult;
+			CIocpServer* m_pSvr;
+			
+			CSocketCreatorConnect(CIocpServer* pSvr) : m_ovl{}, m_pResult(NULL), m_pSvr(pSvr)
+			{
+			}
+			CIocpSocket* Create(CSocketFactory* pFactory)	// (スレッドプール内から呼出)
+			{
+				// ソケット作成に成功したら接続開始
+				TYPE* pConnect = pFactory->CreateSocket<TYPE>(&CSockAddrIn());	// クライアントソケット作成
+				BOOL bRes = (pConnect && pConnect->Connect(m_pResult->ai_addr, (int)m_pResult->ai_addrlen));
+				
+				FreeAddrInfoEx(m_pResult);	// 取得したアドレス情報(ADDRINFOEX)を解放
+				return (bRes ? pConnect : NULL);
+			}
+			
+			static VOID WINAPI QueryComplete(DWORD dwError, DWORD dwBytes, LPWSAOVERLAPPED lpOverlapped)
+			{
+				PADDRINFOEX* ppResult = static_cast<PADDRINFOEX*>(lpOverlapped->Pointer);	// アドレス情報
+				
+				// 名前解決に成功したら接続開始
+				if (dwError == ERROR_SUCCESS)
+				{	// 作成したソケット
+					CSocketCreatorT* pThis = reinterpret_cast<CSocketCreator*>(lpOverlapped) - 1;
+					
+					pThis->m_pResult = *ppResult;
+					if (pThis->m_pSvr->PostCreator(pThis))	// Connectイベント発行
+						return;
+				}
+				FreeAddrInfoEx(*ppResult);	// 失敗時は取得したアドレス情報を解放
+			}
+		private:
+			~CSocketCreatorConnect();	// new以外の生成を禁止
+		} *pCreator = new CSocketCreatorConnect(this);
+		HANDLE hCancel;
+		
+		// ドメイン名、サービス名による名前解決を非同期(重複IO)で実行(UNICODE版限定)
+		return (pCreator && GetAddrInfoEx(pName, pServiceName, NS_DNS, NULL, NULL, &pCreator->m_pResult,
+							NULL, &pCreator->m_ovl, pCreator->QueryComplete, &hCancel) != WSA_IO_PENDING);
 	}
 };
