@@ -292,10 +292,14 @@ public:
 			{
 				// ソケット作成に成功したら接続開始
 				TYPE* pConnect = pFactory->CreateSocket<TYPE>(&CSockAddrIn());	// クライアントソケット作成
-				BOOL bRes = (pConnect && pConnect->Connect(m_pResult->ai_addr, (int)m_pResult->ai_addrlen));
 				
+				if (pConnect && !pConnect->Connect(m_pResult->ai_addr, (int)m_pResult->ai_addrlen))
+				{
+					CSocketList::Delete(pConnect);	// 失敗時は削除
+					pConnect = NULL:
+				}
 				FreeAddrInfoEx(m_pResult);	// 取得したアドレス情報(ADDRINFOEX)を解放
-				return (bRes ? pConnect : NULL);
+				return pConnect;
 			}
 			
 			static VOID WINAPI QueryComplete(DWORD dwError, DWORD dwBytes, LPWSAOVERLAPPED lpOverlapped)
