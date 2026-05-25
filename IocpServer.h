@@ -164,7 +164,7 @@ public:
 	
 	// クライアントソケット追加
 	template <class TYPE>	// TYPE: CIocpSocket派生クラス
-	TYPE* AddConnection(CSockAddrIn& addr)
+	TYPE* AddConnection(const CSockAddrIn& addr)
 	{
 		TYPE* pConnect = CreateSocket<TYPE>(&CSockAddrIn());	// クライアントソケット作成
 		
@@ -295,8 +295,8 @@ public:
 				
 				if (pConnect && !pConnect->Connect(m_pResult->ai_addr, (int)m_pResult->ai_addrlen))
 				{
-					CSocketList::Delete(pConnect, pFactory);	// 失敗時は削除
-					pConnect = NULL:
+					pFactory->DeleteSocket(pConnect);	// 失敗時は削除
+					pConnect = NULL;
 				}
 				FreeAddrInfoEx(m_pResult);	// 取得したアドレス情報(ADDRINFOEX)を解放
 				return pConnect;
@@ -304,26 +304,29 @@ public:
 			
 			static VOID WINAPI QueryComplete(DWORD dwError, DWORD dwBytes, LPWSAOVERLAPPED lpOverlapped)
 			{
-				PADDRINFOEX* ppResult = static_cast<PADDRINFOEX*>(lpOverlapped->Pointer);	// アドレス情報
+				PADDRINFOEX pResult = *static_cast<PADDRINFOEX*>(lpOverlapped->Pointer);	// アドレス情報
 				
 				// 名前解決に成功したら接続開始
 				if (dwError == ERROR_SUCCESS)
 				{	// 作成したソケット
-					CSocketCreatorT* pThis = reinterpret_cast<CSocketCreator*>(lpOverlapped) - 1;
-					
-					pThis->m_pResult = *ppResult;
+					CSocketCreatorConnect* pThis = static_cast<CSocketCreatorConnect*>(
+													reinterpret_cast<CSocketCreator*>(lpOverlapped) - 1);
+					pThis->m_pResult = pResult;
 					if (pThis->m_pSvr->PostCreator(pThis))	// Connectイベント発行
 						return;
 				}
-				FreeAddrInfoEx(*ppResult);	// 失敗時は取得したアドレス情報を解放
+				FreeAddrInfoEx(pResult);	// 失敗時は取得したアドレス情報を解放
 			}
-		private:
-			~CSocketCreatorConnect();	// new以外の生成を禁止
 		} *pCreator = new CSocketCreatorConnect(this);
 		HANDLE hCancel;
 		
 		// ドメイン名、サービス名による名前解決を非同期(重複IO)で実行(UNICODE版限定)
-		return (pCreator && GetAddrInfoEx(pName, pServiceName, NS_DNS, NULL, NULL, &pCreator->m_pResult,
-							NULL, &pCreator->m_ovl, pCreator->QueryComplete, &hCancel) != WSA_IO_PENDING);
+		if (pCreator && GetAddrInfoEx(pName, pServiceName, NS_DNS, NULL, NULL, &pCreator->m_pResult,
+									NULL, &pCreator->m_ovl, pCreator->QueryComplete, &hCancel) != WSA_IO_PENDING)
+		{
+			delete pCreator;
+			return FALSE;
+		}
+		return TRUE;
 	}
 };
