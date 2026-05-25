@@ -311,16 +311,15 @@ public:
 					FreeAddrInfoEx(pThis->m_pResult);	// 失敗時は取得したアドレス情報を解放
 			}
 		} *pCreator = new CSocketCreatorConnect(this);
-		HANDLE hCancel;
 		
-		// ドメイン名、サービス名による名前解決を非同期(重複IO)で実行(UNICODE版限定)
-		if (pCreator)
+		if (pCreator)	// ドメイン名、サービス名による名前解決を非同期(重複IO)で実行(UNICODE版限定)
 		{
+			HANDLE hCancel;
 			if (GetAddrInfoEx(pName, pServiceName, NS_DNS, NULL, NULL, &pCreator->m_pResult,
 							NULL, &pCreator->m_ovl, pCreator->QueryComplete, &hCancel) == WSA_IO_PENDING)
 				return TRUE;
 			
-			delete pCreator;
+			delete pCreator;	// 失敗時は削除
 		}
 		return FALSE;
 	}
