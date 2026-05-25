@@ -315,11 +315,11 @@ public:
 		
 		// ドメイン名、サービス名による名前解決を非同期(重複IO)で実行(UNICODE版限定)
 		if (pCreator && GetAddrInfoEx(pName, pServiceName, NS_DNS, NULL, NULL, &pCreator->m_pResult,
-									NULL, &pCreator->m_ovl, pCreator->QueryComplete, &hCancel) != WSA_IO_PENDING)
+								NULL, &pCreator->m_ovl, pCreator->QueryComplete, &hCancel) != WSA_IO_PENDING)
 		{
 			delete pCreator;
-			return FALSE;
+			pCreator = NULL;
 		}
-		return TRUE;
+		return (pCreator != NULL);
 	}
 };
