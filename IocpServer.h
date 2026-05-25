@@ -290,9 +290,9 @@ public:
 			}
 			CIocpSocket* Create(CSocketFactory* pFactory)	// (スレッドプール内から呼出)
 			{
-				// ソケット作成に成功したら接続開始
 				TYPE* pConnect = pFactory->CreateSocket<TYPE>(&CSockAddrIn());	// クライアントソケット作成
 				
+				// ソケット作成に成功したら接続開始
 				if (pConnect && !pConnect->Connect(m_pResult->ai_addr, (int)m_pResult->ai_addrlen))
 				{
 					pFactory->DeleteSocket(pConnect);	// 失敗時は削除
@@ -304,18 +304,11 @@ public:
 			
 			static VOID WINAPI QueryComplete(DWORD dwError, DWORD dwBytes, LPWSAOVERLAPPED lpOverlapped)
 			{
-				PADDRINFOEX pResult = *static_cast<PADDRINFOEX*>(lpOverlapped->Pointer);	// アドレス情報
-				
-				// 名前解決に成功したら接続開始
-				if (dwError == ERROR_SUCCESS)
-				{	// 作成したソケット
-					CSocketCreatorConnect* pThis = static_cast<CSocketCreatorConnect*>(
-													reinterpret_cast<CSocketCreator*>(lpOverlapped) - 1);
-					pThis->m_pResult = pResult;
-					if (pThis->m_pSvr->PostCreator(pThis))	// Connectイベント発行
-						return;
-				}
-				FreeAddrInfoEx(pResult);	// 失敗時は取得したアドレス情報を解放
+				CSocketCreatorConnect* pThis = static_cast<CSocketCreatorConnect*>(
+												reinterpret_cast<CSocketCreator*>(lpOverlapped) - 1);
+				// 名前解決に成功したらIOCPイベント発行
+				if (dwError != ERROR_SUCCESS || !pThis->m_pSvr->PostCreator(pThis))
+					FreeAddrInfoEx(pThis->m_pResult);	// 失敗時は取得したアドレス情報を解放
 			}
 		} *pCreator = new CSocketCreatorConnect(this);
 		HANDLE hCancel;
