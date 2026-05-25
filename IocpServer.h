@@ -314,12 +314,14 @@ public:
 		HANDLE hCancel;
 		
 		// ドメイン名、サービス名による名前解決を非同期(重複IO)で実行(UNICODE版限定)
-		if (pCreator && GetAddrInfoEx(pName, pServiceName, NS_DNS, NULL, NULL, &pCreator->m_pResult,
-								NULL, &pCreator->m_ovl, pCreator->QueryComplete, &hCancel) != WSA_IO_PENDING)
+		if (pCreator)
 		{
+			if (GetAddrInfoEx(pName, pServiceName, NS_DNS, NULL, NULL, &pCreator->m_pResult,
+							NULL, &pCreator->m_ovl, pCreator->QueryComplete, &hCancel) == WSA_IO_PENDING)
+				return TRUE;
+			
 			delete pCreator;
-			pCreator = NULL;
 		}
-		return (pCreator != NULL);
+		return FALSE;
 	}
 };
