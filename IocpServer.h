@@ -188,27 +188,26 @@ public:
 	{
 		struct CAddrInfoQuery : public TYPE	// アドレス情報(ADDRINFOEX)取得用の派生クラス
 		{
-			PADDRINFOEX pResult;
+			PADDRINFOEX m_pResult;
 			
 			static VOID WINAPI QueryComplete(DWORD dwError, DWORD dwBytes, LPWSAOVERLAPPED lpOverlapped)
 			{
-				PADDRINFOEX* ppResult = static_cast<PADDRINFOEX*>(lpOverlapped->Pointer);	// アドレス情報
-				TYPE* pThis = reinterpret_cast<TYPE*>(ppResult) - 1;	// 作成したソケット
+				CAddrInfoQuery* pThis = CONTAINING_RECORD(lpOverlapped, CAddrInfoQuery, m_ovl);
+				PADDRINFOEX pResult = pThis->m_pResult;	// アドレス情報
 				
 				// 名前解決に成功したら接続開始
 				::ZeroMemory(&pThis->m_ovl, sizeof(pThis->m_ovl));
-				if (dwError != ERROR_SUCCESS || 
-					!pThis->Connect((*ppResult)->ai_addr, (int)(*ppResult)->ai_addrlen))
+				if (dwError != ERROR_SUCCESS || !pThis->Connect(pResult->ai_addr, (int)pResult->ai_addrlen))
 					CSocketList::Delete(pThis);	// 失敗時は削除
 				
-				FreeAddrInfoEx(*ppResult);	// 取得したアドレス情報(ADDRINFOEX)を解放
+				FreeAddrInfoEx(pResult);	// 取得したアドレス情報(ADDRINFOEX)を解放
 			}
 		} *pConnect = CreateSocket<CAddrInfoQuery>(&CSockAddrIn());	// クライアントソケット作成
 		HANDLE hCancel;
 		
 		// ドメイン名、サービス名による名前解決を非同期(重複IO)で実行(UNICODE版限定)
 		if (pConnect && 
-			 GetAddrInfoEx(pName, pServiceName, NS_DNS, NULL, NULL, &pConnect->pResult,
+			 GetAddrInfoEx(pName, pServiceName, NS_DNS, NULL, NULL, &pConnect->m_pResult,
 						NULL, &pConnect->m_ovl, pConnect->QueryComplete, &hCancel) != WSA_IO_PENDING)
 		{
 			CSocketList::Delete(pConnect, this);	// 失敗時は削除
@@ -236,20 +235,20 @@ public:
 	template <class TYPE>	// TYPE: CIocpSocket派生クラス
 	BOOL AddListener(USHORT nPort, int nConnections = SOMAXCONN)
 	{
-		struct CSocketCreatorListen : public CSocketCreator
+		class CSocketCreatorListen : public CSocketCreator
 		{
 			USHORT m_nPort;
 			int m_nConnections;
 			
-			CSocketCreatorListen(USHORT nPort, int nConnections) : m_nPort(nPort), m_nConnections(nConnections)
-			{
-			}
 			CIocpSocket* Create(CSocketFactory* pFactory)	// (スレッドプール内から呼出)
 			{
 				return pFactory->AddListener<TYPE>(m_nPort, m_nConnections);
 			}
-		private:
 			~CSocketCreatorListen();	// new以外の生成を禁止
+		public:
+			CSocketCreatorListen(USHORT nPort, int nConnections) : m_nPort(nPort), m_nConnections(nConnections)
+			{
+			}
 		};
 		return PostCreator(new CSocketCreatorListen(nPort, nConnections));	// Listenイベント発行
 	}
@@ -258,19 +257,19 @@ public:
 	template <class TYPE>	// TYPE: CIocpSocket派生クラス
 	BOOL AddConnection(LPCTSTR pAddr, USHORT nPort)	// host: ホスト名, port: ポート番号(プロトコル名)
 	{
-		struct CSocketCreatorConnect : public CSocketCreator
+		class CSocketCreatorConnect : public CSocketCreator
 		{
 			CSockAddrIn m_addr;
 			
-			CSocketCreatorConnect(const CSockAddrIn& addr) : m_addr(addr)
-			{
-			}
 			CIocpSocket* Create(CSocketFactory* pFactory)	// (スレッドプール内から呼出)
 			{
 				return pFactory->AddConnection<TYPE>(m_addr);
 			}
-		private:
 			~CSocketCreatorConnect();	// new以外の生成を禁止
+		public:
+			CSocketCreatorConnect(const CSockAddrIn& addr) : m_addr(addr)
+			{
+			}
 		};
 		return PostCreator(new CSocketCreatorConnect(CSockAddrIn(nPort, pAddr)));	// Connectイベント発行
 	}
@@ -279,34 +278,18 @@ public:
 	template <class TYPE>	// TYPE: CIocpSocket派生クラス
 	BOOL AddConnection(LPCTSTR pName, LPCTSTR pServiceName)
 	{
-		struct CSocketCreatorConnect : public CSocketCreator
+		class CSocketCreatorConnect : public CSocketCreator
 		{
 			OVERLAPPED m_ovl;
 			PADDRINFOEX m_pResult;
-			CIocpServer* m_pSvr;
-			
-			CSocketCreatorConnect(CIocpServer* pSvr) : m_ovl{}, m_pResult(NULL), m_pSvr(pSvr)
-			{
-			}
-			~CSocketCreatorConnect()
-			{
-				if (m_pResult)
-					FreeAddrInfoEx(m_pResult);	// 取得したアドレス情報(ADDRINFOEX)を解放
-			}
-			
-			BOOL GetAddrInfo(LPCTSTR pName, LPCTSTR pServiceName)
-			{
-				HANDLE hCancel;
-				return (GetAddrInfoEx(pName, pServiceName, NS_DNS, NULL, NULL, &m_pResult,
-										NULL, &m_ovl, QueryComplete, &hCancel) == WSA_IO_PENDING);
-			}
+			CIocpServer* m_pServer;
 			
 			static VOID WINAPI QueryComplete(DWORD dwError, DWORD dwBytes, LPWSAOVERLAPPED lpOverlapped)
 			{
-				CSocketCreatorConnect* pThis = static_cast<CSocketCreatorConnect*>(
-												reinterpret_cast<CSocketCreator*>(lpOverlapped) - 1);
-				if (dwError == ERROR_SUCCESS)
-					pThis->m_pSvr->PostCreator(pThis);	// 名前解決に成功したらIOCPイベント発行
+				CSocketCreatorConnect* pThis = CONTAINING_RECORD(lpOverlapped, CSocketCreatorConnect, m_ovl);
+				
+				if (dwError == ERROR_SUCCESS)	// 名前解決に成功したらIOCPイベント発行
+					pThis->m_pServer->PostCreator(pThis);
 				else
 					delete pThis;	// 失敗時は解放
 			}
@@ -323,15 +306,30 @@ public:
 				}
 				return pConnect;
 			}
+			
+			~CSocketCreatorConnect()	// new以外の生成を禁止
+			{
+				if (m_pResult)
+					FreeAddrInfoEx(m_pResult);	// 取得したアドレス情報(ADDRINFOEX)を解放
+			}
+		public:
+			CSocketCreatorConnect(CIocpServer* pServer) : m_ovl{}, m_pResult(NULL), m_pServer(pServer)
+			{
+			}
+			
+			BOOL GetAddrInfo(LPCTSTR pName, LPCTSTR pServiceName)
+			{
+				HANDLE hCancel;
+				BOOL bResult = (GetAddrInfoEx(pName, pServiceName, NS_DNS, NULL, NULL, &m_pResult,
+										NULL, &m_ovl, QueryComplete, &hCancel) == WSA_IO_PENDING);
+				if (!bResult)
+					delete this;	// 失敗時は削除
+				
+				return bResult;
+			}
 		} *pCreator = new CSocketCreatorConnect(this);
 		
-		if (pCreator)
-		{	// ドメイン名、サービス名による名前解決を非同期(重複IO)で実行(UNICODE版限定)
-			if (pCreator->GetAddrInfo(pName, pServiceName))
-				return TRUE;
-			
-			delete pCreator;	// 失敗時は削除
-		}
-		return FALSE;
+		// ドメイン名、サービス名による名前解決を非同期(重複IO)で実行(UNICODE版限定)
+		return (pCreator && pCreator->GetAddrInfo(pName, pServiceName));
 	}
 };
