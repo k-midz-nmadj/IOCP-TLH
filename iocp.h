@@ -136,6 +136,7 @@ protected:
 		if (pThis->m_nSync < 1 && ::InterlockedDecrement(&pThis->m_nThreadNum) == 0 && 
 			pThis->m_nSync < 0)	// 非同期でスレッドプール内から停止
 		{
+			pThis->m_nSync = 0;
 			delete[] pThis->m_pThreads;	// 非同期時にスレッド配列を解放
 			pThis->m_pThreads = NULL;
 		}
@@ -159,26 +160,25 @@ protected:
 		
 		if (nThreadNum > 0 && m_pThreads->m_hThread)	// スレッドプール実行中
 		{	// 待機用スレッドハンドルの配列作成
-			LONG nTplCnt;
 			DWORD dwCrtThreadId = ::GetCurrentThreadId();
 			LPHANDLE phThreadPool = static_cast<LPHANDLE>(alloca(sizeof(HANDLE) * nThreadNum));
 			
-			for (nTplCnt = 0; nTplCnt < nThreadNum && 
-			                  dwCrtThreadId != m_pThreads[nTplCnt].m_dwThreadID; ++nTplCnt)
-				phThreadPool[nTplCnt] = m_pThreads[nTplCnt].m_hThread;	// 自スレッドは除外
-			
-			if (nTplCnt < nThreadNum)
+			for (LONG nTplCnt = 0; nTplCnt < nThreadNum; ++nTplCnt)
 			{
-				m_nSync = -1;
-				return TRUE;	// スレッドプール内からの停止は待機無し
+				if (dwCrtThreadId == m_pThreads[nTplCnt].m_dwThreadID)
+				{
+					m_nSync = -1;
+					return TRUE;	// スレッドプール内からの停止は待機無し
+				}
+				phThreadPool[nTplCnt] = m_pThreads[nTplCnt].m_hThread;	// 自スレッドは除外
 			}
 			// スレッドプール(自スレッドを除く)の終了待機
-			::WaitForMultipleObjects(nTplCnt, phThreadPool, TRUE, INFINITE);
+			::WaitForMultipleObjects(nThreadNum, phThreadPool, TRUE, INFINITE);
 		}
 		
+		m_nThreadNum = m_nSync = 0;
 		delete[] m_pThreads;	// 待機終了後にスレッド配列を解放
 		m_pThreads = NULL;
-		m_nThreadNum = m_nSync = 0;
 		
 		return TRUE;
 	}
@@ -209,7 +209,8 @@ public:
 	}
 	THRD* GetThread(LONG nThreadNum = 0)	// 実行スレッド取得
 	{
-		return (nThreadNum < (m_pThreads ? GetThreadCount() : CreateThreadPool()) ? &m_pThreads[nThreadNum] : NULL);
+		return (nThreadNum < (m_pThreads ? GetThreadCount() : CreateThreadPool()) ? 
+				&m_pThreads[nThreadNum] : NULL);
 	}
 	
 	// ユーザイベント発行
