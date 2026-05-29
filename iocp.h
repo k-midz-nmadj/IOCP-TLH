@@ -280,7 +280,8 @@ public:
 		
 		// タイムアウト時間設定(最大タイムアウト値/2以上は無効)
 		m_dwMinWaitTime = (nWaitTime <= INFINITE / 2 ? nWaitTime : INFINITE);
-		m_nThreadNum -= (m_nSync = (bSync != FALSE));	// 最終スレッドは同期(終了待機)に割当
+		m_nSync = (bSync != FALSE);
+		m_nThreadNum -= m_nSync;	// 最終スレッドは同期(終了待機)に割当
 		
 		LONG nThreadCnt;
 		for (nThreadCnt = 0; 	// 各スレッドを非同期実行
