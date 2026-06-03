@@ -217,10 +217,8 @@ public:
 		Node *pNode = reinterpret_cast<Node*>(pItem) - 1, *pFind;
 		for (pFind = m_Ring.pNext; pFind != &m_Ring && pFind != pNode; pFind = pFind->pNext);
 		
-		if (pFind == &m_Ring)
-			return FALSE;	// 指定要素が検出不可ならエラー返却
-		
-		return TALC::FreeT(pNode, pAlc);
+		// 指定要素が検出不可ならエラー返却
+		return (pFind != &m_Ring ? TALC::FreeT(pNode, pAlc) : FALSE);
 	}
 	static BOOL Delete(TYPE* pItem, TALC* pAlc = NULL)	// static版(検索不要時)
 	{
