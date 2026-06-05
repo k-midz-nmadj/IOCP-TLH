@@ -134,7 +134,7 @@ public:
 				
 				(*pThis)(pThis->m_pTlh);	// 関数オブジェクト呼出し
 				
-				CTLHeap::FreeT<VOID>(pThis);	// 送信元スレッドへの解放要求
+				CTLHeap::FreeT<VOID>(pThis, pThis->m_pTlh);	// 送信元スレッドへの解放要求
 			}
 		} *pParam = Alloc<CApcParam>();	// メッセージ作成
 		
@@ -144,7 +144,7 @@ public:
 		*static_cast<TPRM*>(pParam) = prm;	// パラメータセット
 		pParam->m_pTlh = pToTlh;	// 送信先セット
 		
-		return pToTlh->QueueAPC(CApcParam::ApcTlh, pParam);	// メッセージ送信
+		return pToTlh->QueueAPC(CApcParam::ApcTlh, pParam, TRUE);	// メッセージ送信
 	}
 };
 
