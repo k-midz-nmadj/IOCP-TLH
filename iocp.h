@@ -61,8 +61,12 @@ public:
 	}
 };
 
+class CIocpThreadDef : public CIocpThread<CIocpThreadDef>
+{
+};
+
 // IOCP用スレッドプールクラス(THRD: スレッド実装クラス)
-template <class THRD = CIocpThread<>>
+template <class THRD = CIocpThreadDef>
 class CIocpThreadPool
 {
 	friend THRD;
