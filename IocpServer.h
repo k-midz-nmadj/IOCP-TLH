@@ -22,7 +22,7 @@
 class CSocketFactory;	// ソケット作成クラス宣言
 
 typedef CIocpOverlapped<CSocketFactory> CSocketOverlapped;	// クライアントクラス
-typedef CIocpThread<CSocketFactory>     CSocketThread;		// スレッドクラス
+typedef CIocpThreadT<CSocketFactory>    CSocketThread;		// スレッドクラス
 typedef CIocpThreadPool<CSocketFactory> CIocpServerBase;	// サーバクラス
 
 // IOCP用ソケットクラス

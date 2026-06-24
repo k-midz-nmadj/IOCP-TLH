@@ -33,7 +33,7 @@ public:
 
 // IOCP用スレッドクラス(MaxEnt: 完了イベント1回で取得できる最大エントリ数)
 template <class THRD = CAPCThread, int MaxEnt = 1>
-class CIocpThread : public CAPCThread
+class CIocpThreadT : public CAPCThread
 {
 	template <class> friend class CIocpThreadPool;
 protected:
@@ -51,7 +51,7 @@ protected:
 	{
 	}
 	
-	CIocpThread(TTPL* pIocp = NULL) : m_pIocp(pIocp)
+	CIocpThreadT(TTPL* pIocp = NULL) : m_pIocp(pIocp)
 	{
 	}
 public:
@@ -61,12 +61,12 @@ public:
 	}
 };
 
-class CIocpThreadDef : public CIocpThread<CIocpThreadDef>
+class CIocpThread : public CIocpThreadT<CIocpThread>
 {
 };
 
 // IOCP用スレッドプールクラス(THRD: スレッド実装クラス)
-template <class THRD = CIocpThreadDef>
+template <class THRD = CIocpThread>
 class CIocpThreadPool
 {
 	friend THRD;
