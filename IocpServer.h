@@ -21,9 +21,9 @@
 
 class CSocketFactory;	// ソケット作成クラス宣言
 
-typedef CIocpOverlapped<CSocketFactory> CSocketOverlapped;	// クライアントクラス
-typedef CIocpThreadT<CSocketFactory>    CSocketThread;		// スレッドクラス
-typedef CIocpThreadPool<CSocketFactory> CIocpServerBase;	// サーバクラス
+typedef CIocpOverlappedT<CSocketFactory> CSocketOverlapped;	// クライアントクラス
+typedef CIocpThreadT<CSocketFactory>     CSocketThread;		// スレッドクラス
+typedef CIocpThreadPoolT<CSocketFactory> CIocpServerBase;	// サーバクラス
 
 // IOCP用ソケットクラス
 class CIocpSocket : public CSocketOverlapped, public CSocketBase
@@ -69,7 +69,7 @@ public:
 // IOCP用ソケット作成クラス
 class CSocketFactory : public CTLHeap<CSocketThread>
 {
-	friend class CIocpThreadPool<CSocketFactory>;
+	friend class CIocpThreadPoolT<CSocketFactory>;
 protected:
 	typedef CTLHList<CIocpSocket, CTLHeap> CSocketList;
 	CSocketList m_listSocket;	// ソケットリストコンテナ

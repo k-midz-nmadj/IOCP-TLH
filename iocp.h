@@ -10,15 +10,15 @@
 
 // IO完了イベント定義クラス(THRD: スレッド実装クラス)
 template <class THRD = CAPCThread>
-class CIocpOverlapped
+class CIocpOverlappedT
 {
-	template <class> friend class CIocpThreadPool;
+	template <class> friend class CIocpThreadPoolT;
 protected:
 	OVERLAPPED m_ovl;
 	DWORD m_dwLastTime;	// イベント発生した最終時間(ms)
 	THRD* m_pThread;	// イベント発生スレッド
 	
-	CIocpOverlapped() : m_ovl{}, m_dwLastTime(::GetTickCount()), m_pThread(NULL)
+	CIocpOverlappedT() : m_ovl{}, m_dwLastTime(::GetTickCount()), m_pThread(NULL)
 	{
 	}
 public:
@@ -35,10 +35,10 @@ public:
 template <class THRD = CAPCThread, int MaxEnt = 1>
 class CIocpThreadT : public CAPCThread
 {
-	template <class> friend class CIocpThreadPool;
+	template <class> friend class CIocpThreadPoolT;
 protected:
-	typedef CIocpOverlapped<THRD> TOVL;	// イベントクラス
-	typedef CIocpThreadPool<THRD> TTPL;	// スレッドプールクラス
+	typedef CIocpOverlappedT<THRD> TOVL;	// イベントクラス
+	typedef CIocpThreadPoolT<THRD> TTPL;	// スレッドプールクラス
 	enum { NEnt = MaxEnt };
 	
 	TTPL* m_pIocp;	// 所有元スレッドプールへの参照
@@ -67,7 +67,7 @@ class CIocpThread : public CIocpThreadT<CIocpThread>
 
 // IOCP用スレッドプールクラス(THRD: スレッド実装クラス)
 template <class THRD = CIocpThread>
-class CIocpThreadPool
+class CIocpThreadPoolT
 {
 	friend THRD;
 protected:
@@ -88,7 +88,7 @@ protected:
 	static DWORD WINAPI WaitForIocp(LPVOID pParam)
 	{
 		THRD* pThread = static_cast<THRD*>(pParam);	// IOCPスレッド
-		CIocpThreadPool* pThis = pThread->m_pIocp;	// スレッドプール
+		CIocpThreadPoolT* pThis = pThread->m_pIocp;	// スレッドプール
 		DWORD dwCurrentTime, dwLastTime = ::GetTickCount();	// 最終更新時間
 		DWORD dwError = -1;
 		
@@ -187,7 +187,7 @@ protected:
 		return TRUE;
 	}
 public:
-	CIocpThreadPool(DWORD nThreadNum = 0) : 
+	CIocpThreadPoolT(DWORD nThreadNum = 0) : 
 		m_hIocp(NULL),
 		m_dwMinWaitTime(INFINITE),
 		m_nThreadNum(0),
@@ -197,7 +197,7 @@ public:
 		if (nThreadNum > 0)
 			CreateThreadPool(nThreadNum);
 	}
-	~CIocpThreadPool()
+	~CIocpThreadPoolT()
 	{
 		JoinThread();	// スレッドプール終了待機
 	}
@@ -307,3 +307,6 @@ public:
 		return (IsRunning() ? JoinThread() : FALSE);	// スレッド実行中なら終了
 	}
 };
+
+typedef CIocpOverlappedT<> CIocpOverlapped;
+typedef CIocpThreadPoolT<> CIocpThreadPool;
