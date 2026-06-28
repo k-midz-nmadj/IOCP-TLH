@@ -9,7 +9,7 @@
 #define DIFF_TIME(now, tm) (now >= tm ? now - (tm) : (DWORD)(0x100000000 - (tm)) + now)
 
 // IO完了イベント定義クラス(THRD: スレッド実装クラス)
-template <class THRD = CAPCThread>
+template <class THRD = CIocpThread>
 class CIocpOverlappedT
 {
 	template <class> friend class CIocpThreadPoolT;
@@ -37,14 +37,13 @@ class CIocpThreadT : public CAPCThread
 {
 	template <class> friend class CIocpThreadPoolT;
 protected:
-	typedef CIocpOverlappedT<THRD> TOVL;	// イベントクラス
 	typedef CIocpThreadPoolT<THRD> TTPL;	// スレッドプールクラス
 	enum { NEnt = MaxEnt };
 	
 	TTPL* m_pIocp;	// 所有元スレッドプールへの参照
 	
 	// 各スレッドイベントのデフォルト実装
-	VOID OnCancelIO(TOVL* pIO)	// IO無効化
+	VOID OnCancelIO(CIocpOverlappedT<THRD>* pIO)	// IO無効化
 	{
 	}
 	VOID OnTimeout(DWORD dwCurrentTime)	// タイムアウト
@@ -71,7 +70,7 @@ class CIocpThreadPoolT
 {
 	friend THRD;
 protected:
-	typedef typename THRD::TOVL TOVL;
+	typedef CIocpOverlappedT<THRD> TOVL;
 	
 	HANDLE m_hIocp;			// IOCPハンドル
 	DWORD m_dwMinWaitTime;	// 最小待機時間(ms)
