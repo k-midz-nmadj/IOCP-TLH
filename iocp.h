@@ -32,7 +32,7 @@ public:
 };
 
 // IOCP用スレッドクラス(MaxEnt: 完了イベント1回で取得できる最大エントリ数)
-template <class THRD = CAPCThread, int MaxEnt = 1>
+template <class THRD = CIocpThread, int MaxEnt = 1>
 class CIocpThreadT : public CAPCThread
 {
 	template <class> friend class CIocpThreadPoolT;
